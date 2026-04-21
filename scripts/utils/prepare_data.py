@@ -6,12 +6,12 @@ Usage: python scripts/prepare_data.py
 
 import os, random, urllib.request, gzip, shutil, time
 
-BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR   = os.path.join(BASE_DIR, 'data')
-GZ_PATH    = os.path.join(DATA_DIR, 'rockyou.txt.gz')
-TXT_PATH   = os.path.join(DATA_DIR, 'rockyou.txt')
-TRAIN_PATH = os.path.join(DATA_DIR, 'TrainEval', 'rockyou_train.txt')
-EVAL_PATH  = os.path.join(DATA_DIR, 'TrainEval', 'rockyou_eval.txt')
+GZ_PATH    = os.path.join(DATA_DIR, 'raw', 'rockyou.txt.gz')
+TXT_PATH   = os.path.join(DATA_DIR, 'raw', 'rockyou.txt')
+TRAIN_PATH = os.path.join(DATA_DIR, 'splits', 'rockyou_train.txt')
+EVAL_PATH  = os.path.join(DATA_DIR, 'splits', 'rockyou_eval.txt')
 
 ROCKYOU_URL = "https://sourceforge.net/projects/wordlist-collection/files/rockyou.txt.gz/download"
 
@@ -60,7 +60,8 @@ def prepare_split(txt, train_out, eval_out, seed=42):
     print(f"   Total: {len(passwords):,} | Train: {len(train_s):,} | Eval: {len(eval_s):,}")
     print(f"   Fait en {time.time()-t0:.0f}s")
 
-os.makedirs(os.path.join(DATA_DIR, 'TrainEval'), exist_ok=True)
+os.makedirs(os.path.join(DATA_DIR, 'raw'), exist_ok=True)
+os.makedirs(os.path.join(DATA_DIR, 'splits'), exist_ok=True)
 
 if os.path.exists(TRAIN_PATH):
     print(f"Train deja present ({TRAIN_PATH}), rien a faire.")

@@ -22,6 +22,5 @@ dist/
 temp/
 
 # Donnees lourdes (a generer localement via prepare_data.py)
-data/rockyou.txt
-data/rockyou.txt.gz
-data/TrainEval/rockyou_train.txt
+data/raw/
+data/splits/rockyou_train.txt

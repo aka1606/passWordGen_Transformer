@@ -192,10 +192,10 @@ def compute_perplexity(model, passwords, sample_size=1000):
 def main():
     random.seed(42)
     
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    train_path = os.path.join(base_dir, 'data', 'TrainEval', 'train.txt')
-    eval_path = os.path.join(base_dir, 'data', 'TrainEval', 'eval.txt')
-    output_path = os.path.join(base_dir, 'output', 'markov_results.json')
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    train_path = os.path.join(base_dir, 'data', 'splits', 'train.txt')
+    eval_path = os.path.join(base_dir, 'data', 'splits', 'eval.txt')
+    output_path = os.path.join(base_dir, 'output', 'results', 'markov_results.json')
     
     print("=" * 60)
     print("CHAÎNES DE MARKOV - GÉNÉRATION DE MOTS DE PASSE")

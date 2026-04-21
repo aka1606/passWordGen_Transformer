@@ -55,8 +55,10 @@ print("=" * 60)
 
 # Charger les données
 print("\nChargement des données...")
-eval_passwords = analyze_passwords('/Users/alik/Documents/ams-projet2/TrainEval/eval.txt')
-train_passwords = analyze_passwords('/Users/alik/Documents/ams-projet2/TrainEval/train.txt')
+import os as _os
+_BASE = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+eval_passwords  = analyze_passwords(_os.path.join(_BASE, 'data', 'splits', 'eval.txt'))
+train_passwords = analyze_passwords(_os.path.join(_BASE, 'data', 'splits', 'train.txt'))
 
 print(f"Eval: {len(eval_passwords)} mots de passe")
 print(f"Train: {len(train_passwords)} mots de passe")

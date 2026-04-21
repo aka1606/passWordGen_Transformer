@@ -227,7 +227,8 @@ results = {
     "recommendation": "small" if ram_available < 16 else "medium",
 }
 
-with open('/Users/alik/Documents/ams-projet2/output/benchmark_results.json', 'w') as f:
+import os as _os; _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+with open(_os.path.join(_base, 'output', 'results', 'benchmark_results.json'), 'w') as f:
     json.dump(results, f, indent=2)
 
 print("\n" + "=" * 70)

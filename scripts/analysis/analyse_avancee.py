@@ -5,10 +5,11 @@ Analyses avancées pour générateur intelligent de mots de passe
 Phase 1: Fondamentaux critiques
 """
 
-import json
-import re
+import json, os, re
 from collections import Counter
 import math
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 print("=" * 70)
 print("PHASE 1: ANALYSES FONDAMENTALES POUR GÉNÉRATEUR INTELLIGENT")
@@ -18,7 +19,7 @@ print("=" * 70)
 print("\n1️⃣  EXTRACTION WORDLIST PROPRE")
 print("-" * 70)
 
-with open('/Users/alik/Documents/ams-projet2/vocabulaire.txt', 'r', encoding='utf-8', errors='ignore') as f:
+with open(os.path.join(BASE_DIR, 'data', 'splits', 'vocabulaire.txt'), 'r', encoding='utf-8', errors='ignore') as f:
     vocab = [line.strip() for line in f if line.strip()]
 
 # Mots purs (seulement lettres)
@@ -44,7 +45,7 @@ print("\n\n2️⃣  NGRAMS AVANCÉS (4-grams, 5-grams)")
 print("-" * 70)
 
 # Charger train.txt
-with open('/Users/alik/Documents/ams-projet2/TrainEval/train.txt', 'r', encoding='utf-8', errors='ignore') as f:
+with open(os.path.join(BASE_DIR, 'data', 'splits', 'train.txt'), 'r', encoding='utf-8', errors='ignore') as f:
     train = [line.strip() for line in f if line.strip()]
 
 # 4-grams
@@ -218,7 +219,7 @@ results = {
     "top_years": dict(year_dist.most_common(20)),
 }
 
-with open('/Users/alik/Documents/ams-projet2/patterns_analysis.json', 'w') as f:
+with open(os.path.join(BASE_DIR, 'output', 'results', 'patterns_analysis.json'), 'w') as f:
     json.dump(results, f, indent=2)
 
 print("\n" + "=" * 70)

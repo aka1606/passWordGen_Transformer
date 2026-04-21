@@ -19,13 +19,13 @@ SCRIPT_VERSION = 6
 # ============================================================
 
 class Config:
-    BASE_DIR        = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    TRAIN_PATH      = os.path.join(BASE_DIR, 'data', 'TrainEval', 'rockyou_train.txt')
-    EVAL_PATH       = os.path.join(BASE_DIR, 'data', 'TrainEval', 'rockyou_eval.txt')
-    OUTPUT_PATH     = os.path.join(BASE_DIR, 'output', 'v6_results.json')
-    MODEL_PATH      = os.path.join(BASE_DIR, 'output', 'v6_model.pt')
-    CHECKPOINT_PATH = os.path.join(BASE_DIR, 'output', 'v6_checkpoint.pt')
-    GEN_PATH        = os.path.join(BASE_DIR, 'output', 'v6_generated.txt')
+    BASE_DIR        = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    TRAIN_PATH      = os.path.join(BASE_DIR, 'data', 'splits', 'rockyou_train.txt')
+    EVAL_PATH       = os.path.join(BASE_DIR, 'data', 'splits', 'rockyou_eval.txt')
+    OUTPUT_PATH     = os.path.join(BASE_DIR, 'output', 'results', 'v6_results.json')
+    MODEL_PATH      = os.path.join(BASE_DIR, 'output', 'models', 'v6_model.pt')
+    CHECKPOINT_PATH = os.path.join(BASE_DIR, 'output', 'models', 'v6_checkpoint.pt')
+    GEN_PATH        = os.path.join(BASE_DIR, 'output', 'generated', 'v6_generated.txt')
 
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 

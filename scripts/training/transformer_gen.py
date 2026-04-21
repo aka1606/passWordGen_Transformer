@@ -19,12 +19,12 @@ from torch.utils.data import Dataset, DataLoader
 SCRIPT_VERSION = 5  # v5 Phase 2: boost LR + warm restarts + gen rapide
 
 class Config:
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    TRAIN_PATH = os.path.join(BASE_DIR, 'data', 'TrainEval', 'train.txt')
-    EVAL_PATH = os.path.join(BASE_DIR, 'data', 'TrainEval', 'eval.txt')
-    OUTPUT_PATH = os.path.join(BASE_DIR, 'output', 'transformer_results.json')
-    MODEL_PATH = os.path.join(BASE_DIR, 'output', 'transformer_model.pt')
-    CHECKPOINT_PATH = os.path.join(BASE_DIR, 'output', 'transformer_checkpoint.pt')
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    TRAIN_PATH = os.path.join(BASE_DIR, 'data', 'splits', 'train.txt')
+    EVAL_PATH = os.path.join(BASE_DIR, 'data', 'splits', 'eval.txt')
+    OUTPUT_PATH = os.path.join(BASE_DIR, 'output', 'results', 'transformer_results.json')
+    MODEL_PATH = os.path.join(BASE_DIR, 'output', 'models', 'transformer_model.pt')
+    CHECKPOINT_PATH = os.path.join(BASE_DIR, 'output', 'models', 'transformer_checkpoint.pt')
     
     DEVICE = 'mps' if torch.backends.mps.is_available() else 'cpu'
     
@@ -733,7 +733,7 @@ def full_evaluation(model, tokenizer, eval_passwords, train_passwords, config):
         print(f"   Exemples: {sorted(list(all_matches))[:50]}")
     
     # Sauvegarder matches + tous les générés dans un seul fichier
-    gen_path = os.path.join(config.BASE_DIR, 'output', 'generated_passwords.txt')
+    gen_path = os.path.join(config.BASE_DIR, 'output', 'generated', 'generated_passwords.txt')
     with open(gen_path, 'w', encoding='utf-8') as f:
         f.write(f"# === MATCHES ({len(all_matches)}/{len(eval_set)} = {combined_coverage:.2f}% coverage) ===\n")
         f.write(f"# Mots de passe de eval retrouvés par le modèle\n")

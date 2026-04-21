@@ -20,7 +20,8 @@ print("=" * 80)
 print("\n1️⃣  EXTRACTION DES FEATURES...")
 print("-" * 80)
 
-with open('/Users/alik/Documents/ams-projet2/data/TrainEval/train.txt', 'r', encoding='utf-8', errors='ignore') as f:
+import os as _os; _BASE = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+with open(_os.path.join(_BASE, 'data', 'splits', 'train.txt'), 'r', encoding='utf-8', errors='ignore') as f:
     passwords = [line.strip() for line in f if line.strip()]
 
 print(f"Mots de passe chargés: {len(passwords)}")
@@ -211,7 +212,7 @@ results = {
     "top_correlations": [(f1, f2, float(c)) for f1, f2, c in corr_pairs[:10]],
 }
 
-with open('/Users/alik/Documents/ams-projet2/output/pca_clustering_analysis.json', 'w') as f:
+with open(_os.path.join(_BASE, 'output', 'results', 'pca_clustering_analysis.json'), 'w') as f:
     json.dump(results, f, indent=2)
 
 print("\n" + "=" * 80)

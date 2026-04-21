@@ -1,7 +1,9 @@
-import re
+import re, os
 from collections import Counter
 import json
 import numpy as np
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def analyze_passwords(fichier):
     """Analyse complète des mots de passe"""
@@ -200,15 +202,16 @@ def analyze_passwords(fichier):
         'avec_speciaux': passwords_with_special,
     }
     
-    with open('stats_analysis.json', 'w') as f:
+    out = os.path.join(BASE_DIR, 'output', 'results', 'stats_analysis.json')
+    with open(out, 'w') as f:
         json.dump(stats, f, indent=2)
-    
+
     print("\n" + "="*60)
-    print("Statistiques sauvegardées dans 'stats_analysis.json'")
+    print(f"Statistiques sauvegardees dans '{out}'")
     print("="*60)
     
     return passwords, stats
 
 # Exécution
 if __name__ == "__main__":
-    passwords, stats = analyze_passwords('TrainEval/train.txt')
+    passwords, stats = analyze_passwords(os.path.join(BASE_DIR, 'data', 'splits', 'train.txt'))
