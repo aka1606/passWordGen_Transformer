@@ -5,6 +5,8 @@
 #SBATCH --job-name=pwdgen_v6
 #SBATCH --output=output/results/slurm_%j.log
 #SBATCH --error=output/results/slurm_%j.err
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=akselalik2002@gmail.com
 
 echo "=== Job $SLURM_JOB_ID | $(date) ==="
 echo "Noeud: $SLURMD_NODENAME"
