@@ -20,3 +20,8 @@ dist/
 # Temp
 .tmp
 temp/
+
+# Donnees lourdes (a generer localement via prepare_data.py)
+data/rockyou.txt
+data/rockyou.txt.gz
+data/TrainEval/rockyou_train.txt
