@@ -137,7 +137,7 @@ class CharTokenizer:
         print(f"   Encodage de {n:,} passwords (numpy pre-alloc)...")
         t0 = time.time()
 
-        result = np.full((n, max_len), pad, dtype=np.int64)
+        result = np.full((n, max_len), pad, dtype=np.int16)  # int16 = 4x moins de RAM
         for i, pwd in enumerate(valid):
             tokens = [sos]
             for c in pwd:
@@ -167,7 +167,7 @@ class PasswordDataset(Dataset):
         return self.inputs.size(0)
 
     def __getitem__(self, idx):
-        return self.inputs[idx], self.targets[idx]
+        return self.inputs[idx].long(), self.targets[idx].long()
 
 # ============================================================
 # ARCHITECTURE (identique v5: RMSNorm + SwiGLU + SDPA + KV-cache)
