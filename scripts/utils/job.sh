@@ -2,6 +2,7 @@
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
+#SBATCH --mem=32G
 #SBATCH --job-name=pwdgen_v6
 #SBATCH --output=output/results/slurm_%j.log
 #SBATCH --error=output/results/slurm_%j.err
