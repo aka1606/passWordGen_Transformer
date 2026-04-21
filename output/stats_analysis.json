@@ -1,0 +1,15 @@
+{
+  "total": 375853,
+  "uniques": 375819,
+  "longueur_min": 1,
+  "longueur_max": 110,
+  "longueur_moyenne": 7.604576789329871,
+  "longueur_mediane": 8.0,
+  "longueur_std": 1.8161463102130284,
+  "entropie": 5.106740654548072,
+  "caracteres_uniques": 92,
+  "avec_minuscules": 319489,
+  "avec_majuscules": 24514,
+  "avec_chiffres": 243706,
+  "avec_speciaux": 1537
+}

@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.Python
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Temp
+.tmp
+temp/

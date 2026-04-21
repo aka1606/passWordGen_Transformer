@@ -1,0 +1,112 @@
+{
+  "pca_explained_variance": [
+    0.3992661046761508,
+    0.6845260686372371,
+    0.8075355427759215,
+    0.9093323040456625,
+    0.9981067607589179
+  ],
+  "pc1_top_features": [
+    {
+      "feature": "special_ratio",
+      "loading": 0.49802989478762244
+    },
+    {
+      "feature": "digit_ratio",
+      "loading": -0.49802989478756304
+    },
+    {
+      "feature": "has_special",
+      "loading": 0.4959089663334476
+    },
+    {
+      "feature": "starts_digit",
+      "loading": -0.38879095678902925
+    },
+    {
+      "feature": "digit_sequences",
+      "loading": 0.312495158658958
+    }
+  ],
+  "pc2_top_features": [
+    {
+      "feature": "entropy",
+      "loading": 0.586129425541928
+    },
+    {
+      "feature": "unique_chars",
+      "loading": 0.5836644266105616
+    },
+    {
+      "feature": "unique_ratio",
+      "loading": 0.4765584078441934
+    },
+    {
+      "feature": "length",
+      "loading": 0.268939895446321
+    },
+    {
+      "feature": "consecutive_digits",
+      "loading": 0.08458134249942949
+    }
+  ],
+  "cluster_counts": {
+    "cluster_0": 3233,
+    "cluster_1": 4461,
+    "cluster_2": 2,
+    "cluster_3": 749,
+    "cluster_4": 1555
+  },
+  "top_correlations": [
+    [
+      "length",
+      "has_lower",
+      NaN
+    ],
+    [
+      "length",
+      "has_upper",
+      NaN
+    ],
+    [
+      "length",
+      "has_digit",
+      NaN
+    ],
+    [
+      "length",
+      "lower_ratio",
+      NaN
+    ],
+    [
+      "length",
+      "upper_ratio",
+      NaN
+    ],
+    [
+      "length",
+      "ends_digit",
+      NaN
+    ],
+    [
+      "length",
+      "starts_upper",
+      NaN
+    ],
+    [
+      "length",
+      "unique_chars",
+      0.5143082079076607
+    ],
+    [
+      "length",
+      "entropy",
+      0.4388661494326324
+    ],
+    [
+      "length",
+      "unique_ratio",
+      -0.14044276387234603
+    ]
+  ]
+}
