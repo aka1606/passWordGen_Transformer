@@ -61,7 +61,7 @@ class Config:
     MIN_DELTA  = 0.0005
 
     # Generation
-    NUM_GENERATE    = 5_000_000
+    NUM_GENERATE    = 1_000_000
     TEMPERATURE     = [0.7]
     TOP_K           = 50
     TOP_P           = 0.92
