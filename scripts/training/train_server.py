@@ -825,15 +825,21 @@ def main():
         return pwds
 
     print("\nChargement des donnees...")
-    all_train_pwds = load_passwords(config.TRAIN_PATH)
-    eval_pwds      = load_passwords(config.EVAL_PATH)
-    print(f"   Train brut: {len(all_train_pwds):,} | Eval: {len(eval_pwds):,}")
+    eval_pwds = load_passwords(config.EVAL_PATH)
+    print(f"   Eval: {len(eval_pwds):,}")
 
-    random.shuffle(all_train_pwds)
-    val_size   = int(len(all_train_pwds) * config.VAL_SPLIT)
-    val_pwds   = all_train_pwds[:val_size]
-    train_pwds = all_train_pwds[val_size:]
-    print(f"   Split -> Train: {len(train_pwds):,} | Val: {len(val_pwds):,}")
+    if not generate_only:
+        all_train_pwds = load_passwords(config.TRAIN_PATH)
+        print(f"   Train brut: {len(all_train_pwds):,}")
+        random.shuffle(all_train_pwds)
+        val_size   = int(len(all_train_pwds) * config.VAL_SPLIT)
+        val_pwds   = all_train_pwds[:val_size]
+        train_pwds = all_train_pwds[val_size:]
+        print(f"   Split -> Train: {len(train_pwds):,} | Val: {len(val_pwds):,}")
+    else:
+        all_train_pwds = []
+        train_pwds     = []
+        val_pwds       = []
 
     has_checkpoint = os.path.exists(config.CHECKPOINT_PATH) and not reset
 
@@ -893,22 +899,22 @@ def main():
         best_val_loss  = float('inf')
         history        = []
 
-    print("\nPre-tensorisation...")
-    train_tensor = tokenizer.encode_all(train_pwds)
-    val_tensor   = tokenizer.encode_all(val_pwds)
-    print(f"   Train: {train_tensor.shape} | Val: {val_tensor.shape}")
+    if not generate_only:
+        print("\nPre-tensorisation...")
+        train_tensor = tokenizer.encode_all(train_pwds)
+        val_tensor   = tokenizer.encode_all(val_pwds)
+        print(f"   Train: {train_tensor.shape} | Val: {val_tensor.shape}")
 
-    # Charge tout le dataset train en VRAM une seule fois (zero copie CPU->GPU par batch)
-    print(f"\nChargement tensor train -> {config.DEVICE.upper()}...")
-    t0 = time.time()
-    train_gpu = train_tensor.to(config.DEVICE, dtype=torch.long)
-    del train_tensor  # libere la RAM CPU
-    vram_mb   = train_gpu.element_size() * train_gpu.nelement() / 1024 / 1024
-    print(f"   {vram_mb:.0f} MB charges en {time.time()-t0:.1f}s")
+        print(f"\nChargement tensor train -> {config.DEVICE.upper()}...")
+        t0 = time.time()
+        train_gpu = train_tensor.to(config.DEVICE, dtype=torch.long)
+        del train_tensor
+        vram_mb   = train_gpu.element_size() * train_gpu.nelement() / 1024 / 1024
+        print(f"   {vram_mb:.0f} MB charges en {time.time()-t0:.1f}s")
 
-    val_dataset  = PasswordDataset(val_tensor)
-    val_loader   = DataLoader(val_dataset, batch_size=config.BATCH_SIZE * 2,
-                              shuffle=False, num_workers=0, pin_memory=True)
+        val_dataset  = PasswordDataset(val_tensor)
+        val_loader   = DataLoader(val_dataset, batch_size=config.BATCH_SIZE * 2,
+                                  shuffle=False, num_workers=0, pin_memory=True)
 
     if not generate_only:
         history, optimizer, early_stopping, scaler = train_model(
