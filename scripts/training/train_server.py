@@ -173,15 +173,19 @@ class PasswordDataset(Dataset):
         return self.inputs[idx], self.targets[idx]  # int16, converti en long sur GPU
 
 
-def gpu_batch_iter(tensor, batch_size, drop_last=True):
-    """Itere sur un tensor GPU deja en VRAM — zero copie CPU->GPU par batch."""
-    n = tensor.size(0)
-    indices = torch.randperm(n, device=tensor.device)
+def gpu_batch_iter(inputs, targets, batch_size, drop_last=True):
+    """
+    Shuffle une fois par epoch (1 gather) puis slices sequentiels (cache-friendly).
+    inputs/targets : tensors GPU pre-splittes, shape [N, seq_len].
+    """
+    n = inputs.size(0)
+    perm = torch.randperm(n, device=inputs.device)
+    # Un seul gather global => acces sequentiel ensuite, bien meilleur pour le cache GPU
+    inputs_s  = inputs[perm]
+    targets_s = targets[perm]
     end = n - batch_size + 1 if drop_last else n
     for start in range(0, end, batch_size):
-        idx = indices[start:start + batch_size]
-        batch = tensor[idx]          # [B, seq_len], deja sur GPU
-        yield batch[:, :-1].contiguous(), batch[:, 1:].contiguous()
+        yield inputs_s[start:start + batch_size], targets_s[start:start + batch_size]
 
 # ============================================================
 # ARCHITECTURE (identique v5: RMSNorm + SwiGLU + SDPA + KV-cache)
@@ -514,18 +518,19 @@ _interrupted = False
 def train_model(model, train_data, val_loader, eval_passwords, tokenizer, config,
                 start_epoch=0, global_step=0, best_val_loss=float('inf'),
                 history=None, optimizer=None, early_stopping=None, scaler=None):
-    """train_data : tensor GPU (mode rapide) ou DataLoader (fallback)."""
+    """train_data : tuple (inputs_gpu, targets_gpu) ou DataLoader (fallback)."""
     global _interrupted
     device  = config.DEVICE
     model   = model.to(device)
     use_amp = config.USE_AMP and device == 'cuda'
 
-    gpu_mode = isinstance(train_data, torch.Tensor)
+    gpu_mode = isinstance(train_data, tuple)
     if gpu_mode:
-        n_train         = train_data.size(0)
-        num_batches     = n_train // config.BATCH_SIZE
+        train_inputs_gpu, train_targets_gpu = train_data
+        n_train     = train_inputs_gpu.size(0)
+        num_batches = n_train // config.BATCH_SIZE
     else:
-        num_batches     = len(train_data)
+        num_batches = len(train_data)
 
     if optimizer is None:
         optimizer = torch.optim.AdamW(
@@ -579,7 +584,7 @@ def train_model(model, train_data, val_loader, eval_passwords, tokenizer, config
         epoch_start   = time.time()
         optimizer.zero_grad(set_to_none=True)
 
-        batch_iter = gpu_batch_iter(train_data, config.BATCH_SIZE) if gpu_mode else train_data
+        batch_iter = gpu_batch_iter(train_inputs_gpu, train_targets_gpu, config.BATCH_SIZE) if gpu_mode else train_data
         for batch_idx, (x, y) in enumerate(batch_iter):
             if _interrupted:
                 break
@@ -899,10 +904,13 @@ def main():
     # Charge tout le dataset train en VRAM une seule fois (zero copie CPU->GPU par batch)
     print(f"\nChargement tensor train -> {config.DEVICE.upper()}...")
     t0 = time.time()
-    train_gpu = train_tensor.to(config.DEVICE, dtype=torch.long)
-    vram_mb   = train_gpu.element_size() * train_gpu.nelement() / 1024 / 1024
-    print(f"   {vram_mb:.0f} MB charges en {time.time()-t0:.1f}s — zero copie par batch desormais")
+    train_gpu     = train_tensor.to(config.DEVICE, dtype=torch.long)
     del train_tensor  # libere la RAM CPU
+    train_inputs  = train_gpu[:, :-1].contiguous()   # [N, seq_len-1]
+    train_targets = train_gpu[:, 1:].contiguous()    # [N, seq_len-1]
+    del train_gpu  # libere, on garde seulement inputs/targets
+    vram_mb = (train_inputs.element_size() * train_inputs.nelement() * 2) / 1024 / 1024
+    print(f"   {vram_mb:.0f} MB (inputs+targets) charges en {time.time()-t0:.1f}s")
 
     val_dataset  = PasswordDataset(val_tensor)
     val_loader   = DataLoader(val_dataset, batch_size=config.BATCH_SIZE * 2,
@@ -910,7 +918,7 @@ def main():
 
     if not generate_only:
         history, optimizer, early_stopping, scaler = train_model(
-            model, train_gpu, val_loader, eval_pwds, tokenizer, config,
+            model, (train_inputs, train_targets), val_loader, eval_pwds, tokenizer, config,
             start_epoch, global_step, best_val_loss, history, optimizer,
             early_stopping, scaler
         )
