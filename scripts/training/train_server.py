@@ -173,19 +173,18 @@ class PasswordDataset(Dataset):
         return self.inputs[idx], self.targets[idx]  # int16, converti en long sur GPU
 
 
-def gpu_batch_iter(inputs, targets, batch_size, drop_last=True):
+def gpu_batch_iter(tensor, batch_size, drop_last=True):
     """
-    Shuffle une fois par epoch (1 gather) puis slices sequentiels (cache-friendly).
-    inputs/targets : tensors GPU pre-splittes, shape [N, seq_len].
+    Shuffle une fois par epoch puis slices sequentiels (cache-friendly).
+    tensor : [N, seq_len] sur GPU. Peak memoire = 2x le tensor (original + shuffled).
     """
-    n = inputs.size(0)
-    perm = torch.randperm(n, device=inputs.device)
-    # Un seul gather global => acces sequentiel ensuite, bien meilleur pour le cache GPU
-    inputs_s  = inputs[perm]
-    targets_s = targets[perm]
+    n = tensor.size(0)
+    perm = torch.randperm(n, device=tensor.device)
+    shuffled = tensor[perm]          # 1 gather global, acces sequentiel ensuite
     end = n - batch_size + 1 if drop_last else n
     for start in range(0, end, batch_size):
-        yield inputs_s[start:start + batch_size], targets_s[start:start + batch_size]
+        batch = shuffled[start:start + batch_size]
+        yield batch[:, :-1], batch[:, 1:]   # views, pas de copie
 
 # ============================================================
 # ARCHITECTURE (identique v5: RMSNorm + SwiGLU + SDPA + KV-cache)
@@ -444,7 +443,7 @@ def evaluate_val(model, val_loader, criterion, device, scaler_enabled=True):
         y = y.to(device, dtype=torch.long, non_blocking=True)
         with torch.autocast('cuda', dtype=torch.float16, enabled=scaler_enabled):
             logits = model(x)
-            loss   = criterion(logits.view(-1, logits.size(-1)), y.view(-1))
+            loss   = criterion(logits.reshape(-1, logits.size(-1)), y.reshape(-1))
         total_loss    += loss.item() * x.size(0)
         mask           = (y != 0)
         total_correct += ((logits.argmax(dim=-1) == y) & mask).sum().item()
@@ -518,17 +517,15 @@ _interrupted = False
 def train_model(model, train_data, val_loader, eval_passwords, tokenizer, config,
                 start_epoch=0, global_step=0, best_val_loss=float('inf'),
                 history=None, optimizer=None, early_stopping=None, scaler=None):
-    """train_data : tuple (inputs_gpu, targets_gpu) ou DataLoader (fallback)."""
+    """train_data : tensor GPU [N, seq_len] (mode rapide) ou DataLoader (fallback)."""
     global _interrupted
     device  = config.DEVICE
     model   = model.to(device)
     use_amp = config.USE_AMP and device == 'cuda'
 
-    gpu_mode = isinstance(train_data, tuple)
+    gpu_mode = isinstance(train_data, torch.Tensor)
     if gpu_mode:
-        train_inputs_gpu, train_targets_gpu = train_data
-        n_train     = train_inputs_gpu.size(0)
-        num_batches = n_train // config.BATCH_SIZE
+        num_batches = train_data.size(0) // config.BATCH_SIZE
     else:
         num_batches = len(train_data)
 
@@ -584,7 +581,7 @@ def train_model(model, train_data, val_loader, eval_passwords, tokenizer, config
         epoch_start   = time.time()
         optimizer.zero_grad(set_to_none=True)
 
-        batch_iter = gpu_batch_iter(train_inputs_gpu, train_targets_gpu, config.BATCH_SIZE) if gpu_mode else train_data
+        batch_iter = gpu_batch_iter(train_data, config.BATCH_SIZE) if gpu_mode else train_data
         for batch_idx, (x, y) in enumerate(batch_iter):
             if _interrupted:
                 break
@@ -601,7 +598,7 @@ def train_model(model, train_data, val_loader, eval_passwords, tokenizer, config
 
             with torch.autocast('cuda', dtype=torch.float16, enabled=use_amp):
                 logits = model(x)
-                loss   = criterion(logits.view(-1, tokenizer.vocab_size), y.view(-1))
+                loss   = criterion(logits.reshape(-1, tokenizer.vocab_size), y.reshape(-1))
                 loss   = loss / accum
 
             scaler.scale(loss).backward()
@@ -904,13 +901,10 @@ def main():
     # Charge tout le dataset train en VRAM une seule fois (zero copie CPU->GPU par batch)
     print(f"\nChargement tensor train -> {config.DEVICE.upper()}...")
     t0 = time.time()
-    train_gpu     = train_tensor.to(config.DEVICE, dtype=torch.long)
+    train_gpu = train_tensor.to(config.DEVICE, dtype=torch.long)
     del train_tensor  # libere la RAM CPU
-    train_inputs  = train_gpu[:, :-1].contiguous()   # [N, seq_len-1]
-    train_targets = train_gpu[:, 1:].contiguous()    # [N, seq_len-1]
-    del train_gpu  # libere, on garde seulement inputs/targets
-    vram_mb = (train_inputs.element_size() * train_inputs.nelement() * 2) / 1024 / 1024
-    print(f"   {vram_mb:.0f} MB (inputs+targets) charges en {time.time()-t0:.1f}s")
+    vram_mb   = train_gpu.element_size() * train_gpu.nelement() / 1024 / 1024
+    print(f"   {vram_mb:.0f} MB charges en {time.time()-t0:.1f}s")
 
     val_dataset  = PasswordDataset(val_tensor)
     val_loader   = DataLoader(val_dataset, batch_size=config.BATCH_SIZE * 2,
@@ -918,7 +912,7 @@ def main():
 
     if not generate_only:
         history, optimizer, early_stopping, scaler = train_model(
-            model, (train_inputs, train_targets), val_loader, eval_pwds, tokenizer, config,
+            model, train_gpu, val_loader, eval_pwds, tokenizer, config,
             start_epoch, global_step, best_val_loss, history, optimizer,
             early_stopping, scaler
         )
