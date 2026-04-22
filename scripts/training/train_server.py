@@ -23,9 +23,12 @@ class Config:
     TRAIN_PATH      = os.path.join(BASE_DIR, 'data', 'splits', 'rockyou_train.txt')
     EVAL_PATH       = os.path.join(BASE_DIR, 'data', 'splits', 'rockyou_eval.txt')
     OUTPUT_PATH     = os.path.join(BASE_DIR, 'output', 'results', 'v6_results.json')
-    MODEL_PATH      = os.path.join(BASE_DIR, 'output', 'models', 'v6_model.pt')
-    CHECKPOINT_PATH = os.path.join(BASE_DIR, 'output', 'models', 'v6_checkpoint.pt')
     GEN_PATH        = os.path.join(BASE_DIR, 'output', 'generated', 'v6_generated.txt')
+
+    # Checkpoints sur /dev/shm (RAM disk) si dispo, sinon NFS
+    _FAST_DIR       = '/dev/shm/pwdgen_v6' if os.path.exists('/dev/shm') else os.path.join(BASE_DIR, 'output', 'models')
+    MODEL_PATH      = os.path.join(_FAST_DIR, 'v6_model.pt')
+    CHECKPOINT_PATH = os.path.join(_FAST_DIR, 'v6_checkpoint.pt')
 
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -590,10 +593,13 @@ def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, conf
             train_loss += loss.item() * accum
             global_step += 1
 
-            if batch_idx % 500 == 0:
-                acc = train_correct / max(train_total, 1) * 100
+            if batch_idx % 200 == 0:
+                acc     = train_correct / max(train_total, 1) * 100
+                elapsed = time.time() - epoch_start
+                ms_per_batch = elapsed / max(batch_idx, 1) * 1000
                 print(f"   Epoch {epoch+1}/{config.EPOCHS} | Batch {batch_idx}/{len(train_loader)} | "
-                      f"Loss: {loss.item()*accum:.4f} | Acc: {acc:.1f}% | LR: {lr:.2e}")
+                      f"Loss: {loss.item()*accum:.4f} | Acc: {acc:.1f}% | "
+                      f"LR: {lr:.2e} | {ms_per_batch:.0f}ms/batch")
 
         if _interrupted:
             print(f"\n   Sauvegarde checkpoint epoch {epoch+1}...")
@@ -656,7 +662,17 @@ def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, conf
         save_checkpoint(config.CHECKPOINT_PATH, model, optimizer, scaler,
                         tokenizer, epoch + 1, global_step, best_val_loss,
                         early_stopping, history, config)
-        print(f"   Checkpoint epoch {epoch+1} sauvegarde")
+        print(f"   Checkpoint epoch {epoch+1} sauvegarde (RAM disk)")
+
+        # Synchro vers NFS toutes les 3 epochs
+        if (epoch + 1) % 3 == 0:
+            import shutil
+            nfs_models = os.path.join(config.BASE_DIR, 'output', 'models')
+            os.makedirs(nfs_models, exist_ok=True)
+            shutil.copy2(config.CHECKPOINT_PATH, os.path.join(nfs_models, 'v6_checkpoint.pt'))
+            if os.path.exists(config.MODEL_PATH):
+                shutil.copy2(config.MODEL_PATH, os.path.join(nfs_models, 'v6_model.pt'))
+            print(f"   Synchro NFS effectuee (epoch {epoch+1})")
 
         if early_stopping(val_loss):
             print(f"\n   EARLY STOPPING a epoch {epoch+1}!")
@@ -753,8 +769,22 @@ def main():
     reset         = '--reset' in sys.argv
     generate_only = '--generate-only' in sys.argv
 
+    # Creer le dossier fast (RAM disk) et copier checkpoint existant si besoin
+    NFS_MODEL = os.path.join(config.BASE_DIR, 'output', 'models', 'v6_model.pt')
+    NFS_CKPT  = os.path.join(config.BASE_DIR, 'output', 'models', 'v6_checkpoint.pt')
+    os.makedirs(config._FAST_DIR, exist_ok=True)
+    if not os.path.exists(config.CHECKPOINT_PATH) and os.path.exists(NFS_CKPT):
+        import shutil
+        print(f"Copie checkpoint NFS -> RAM disk ({NFS_CKPT} -> {config.CHECKPOINT_PATH})")
+        shutil.copy2(NFS_CKPT, config.CHECKPOINT_PATH)
+    if not os.path.exists(config.MODEL_PATH) and os.path.exists(NFS_MODEL):
+        import shutil
+        print(f"Copie model NFS -> RAM disk")
+        shutil.copy2(NFS_MODEL, config.MODEL_PATH)
+
     print("=" * 60)
     print(f"PasswordTransformer v{SCRIPT_VERSION} — RockYou 14M")
+    print(f"Checkpoints: {config._FAST_DIR}")
     print(f"Device: {config.DEVICE.upper()} | AMP: {config.USE_AMP}")
     print(f"Archi: {config.NUM_LAYERS}L-{config.NUM_HEADS}H-{config.EMBED_DIM}D | SwiGLU+RMSNorm+KV-cache")
     print("=" * 60)
@@ -886,6 +916,17 @@ def main():
         with open(config.OUTPUT_PATH, 'w', encoding='utf-8') as f:
             json.dump(final, f, indent=2, ensure_ascii=False, default=str)
 
+    # Synchro finale RAM disk -> NFS
+    import shutil
+    nfs_models = os.path.join(config.BASE_DIR, 'output', 'models')
+    os.makedirs(nfs_models, exist_ok=True)
+    for fname in ['v6_checkpoint.pt', 'v6_model.pt']:
+        src = os.path.join(config._FAST_DIR, fname)
+        dst = os.path.join(nfs_models, fname)
+        if os.path.exists(src):
+            shutil.copy2(src, dst)
+            print(f"   Synchro finale: {fname} -> NFS")
+
     combined = eval_results.get('combined', {})
     print(f"\n{'='*60}")
     print(f"RESUME FINAL v{SCRIPT_VERSION}")
@@ -894,7 +935,7 @@ def main():
     print(f"   Matches: {combined.get('coverage_matches', 0)}/{len(eval_pwds):,}")
     print(f"   Total genere: {combined.get('total_unique_generated', 0):,}")
     print(f"   Resultats: {config.OUTPUT_PATH}")
-    print(f"   Modele: {config.MODEL_PATH}")
+    print(f"   Modele: {nfs_models}")
     print(f"{'='*60}")
 
 
