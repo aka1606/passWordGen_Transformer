@@ -170,7 +170,7 @@ class PasswordDataset(Dataset):
         return self.inputs.size(0)
 
     def __getitem__(self, idx):
-        return self.inputs[idx].long(), self.targets[idx].long()
+        return self.inputs[idx], self.targets[idx]  # int16, converti en long sur GPU
 
 # ============================================================
 # ARCHITECTURE (identique v5: RMSNorm + SwiGLU + SDPA + KV-cache)
@@ -425,7 +425,8 @@ def evaluate_val(model, val_loader, criterion, device, scaler_enabled=True):
     total_correct = 0
     total_tokens  = 0
     for x, y in val_loader:
-        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
+        x = x.to(device, dtype=torch.long, non_blocking=True)
+        y = y.to(device, dtype=torch.long, non_blocking=True)
         with torch.autocast('cuda', dtype=torch.float16, enabled=scaler_enabled):
             logits = model(x)
             loss   = criterion(logits.view(-1, logits.size(-1)), y.view(-1))
@@ -562,8 +563,8 @@ def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, conf
             if _interrupted:
                 break
 
-            x = x.to(device, non_blocking=True)
-            y = y.to(device, non_blocking=True)
+            x = x.to(device, dtype=torch.long, non_blocking=True)
+            y = y.to(device, dtype=torch.long, non_blocking=True)
 
             opt_step = global_step // accum
             lr = get_lr(opt_step, config.WARMUP_STEPS, config.LEARNING_RATE,
