@@ -172,6 +172,17 @@ class PasswordDataset(Dataset):
     def __getitem__(self, idx):
         return self.inputs[idx], self.targets[idx]  # int16, converti en long sur GPU
 
+
+def gpu_batch_iter(tensor, batch_size, drop_last=True):
+    """Itere sur un tensor GPU deja en VRAM — zero copie CPU->GPU par batch."""
+    n = tensor.size(0)
+    indices = torch.randperm(n, device=tensor.device)
+    end = n - batch_size + 1 if drop_last else n
+    for start in range(0, end, batch_size):
+        idx = indices[start:start + batch_size]
+        batch = tensor[idx]          # [B, seq_len], deja sur GPU
+        yield batch[:, :-1], batch[:, 1:]
+
 # ============================================================
 # ARCHITECTURE (identique v5: RMSNorm + SwiGLU + SDPA + KV-cache)
 # ============================================================
@@ -500,13 +511,21 @@ def get_lr(step, warmup_steps, max_lr, cycle_length=5000, cycle_decay=0.80):
 
 _interrupted = False
 
-def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, config,
+def train_model(model, train_data, val_loader, eval_passwords, tokenizer, config,
                 start_epoch=0, global_step=0, best_val_loss=float('inf'),
                 history=None, optimizer=None, early_stopping=None, scaler=None):
+    """train_data : tensor GPU (mode rapide) ou DataLoader (fallback)."""
     global _interrupted
     device  = config.DEVICE
     model   = model.to(device)
     use_amp = config.USE_AMP and device == 'cuda'
+
+    gpu_mode = isinstance(train_data, torch.Tensor)
+    if gpu_mode:
+        n_train         = train_data.size(0)
+        num_batches     = n_train // config.BATCH_SIZE
+    else:
+        num_batches     = len(train_data)
 
     if optimizer is None:
         optimizer = torch.optim.AdamW(
@@ -523,7 +542,7 @@ def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, conf
         early_stopping = EarlyStopping(patience=config.PATIENCE, min_delta=config.MIN_DELTA)
 
     accum            = config.GRAD_ACCUM_STEPS
-    steps_per_epoch  = len(train_loader) // accum
+    steps_per_epoch  = num_batches // accum
     if history is None:
         history = []
 
@@ -538,6 +557,7 @@ def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, conf
     print(f"ENTRAINEMENT v{SCRIPT_VERSION} {'(REPRISE)' if start_epoch > 0 else ''}")
     print(f"{'='*60}")
     print(f"   Device: {device.upper()} | AMP float16: {'ON' if use_amp else 'OFF'}")
+    print(f"   Mode: {'GPU-RESIDENT (zero copie CPU->GPU)' if gpu_mode else 'DataLoader'}")
     if device == 'cuda':
         print(f"   GPU: {torch.cuda.get_device_name(0)} | VRAM: {torch.cuda.get_device_properties(0).total_memory//1024**3}GB")
     print(f"   Parametres: {model.count_parameters():,} ({model.count_parameters()*4/1024/1024:.1f} MB)")
@@ -545,7 +565,7 @@ def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, conf
     print(f"   Batch effective: {config.BATCH_SIZE} x {accum} = {config.BATCH_SIZE * accum}")
     print(f"   Steps/epoch: {steps_per_epoch:,}")
     print(f"   Early stopping: {early_stopping.status()}")
-    print(f"   Train: {len(train_loader):,} batches | Val: {len(val_loader):,} batches")
+    print(f"   Train: {num_batches:,} batches | Val: {len(val_loader):,} batches")
     print(f"{'='*60}")
 
     for epoch in range(start_epoch, config.EPOCHS):
@@ -559,12 +579,14 @@ def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, conf
         epoch_start   = time.time()
         optimizer.zero_grad(set_to_none=True)
 
-        for batch_idx, (x, y) in enumerate(train_loader):
+        batch_iter = gpu_batch_iter(train_data, config.BATCH_SIZE) if gpu_mode else train_data
+        for batch_idx, (x, y) in enumerate(batch_iter):
             if _interrupted:
                 break
 
-            x = x.to(device, dtype=torch.long, non_blocking=True)
-            y = y.to(device, dtype=torch.long, non_blocking=True)
+            if not gpu_mode:
+                x = x.to(device, dtype=torch.long, non_blocking=True)
+                y = y.to(device, dtype=torch.long, non_blocking=True)
 
             opt_step = global_step // accum
             lr = get_lr(opt_step, config.WARMUP_STEPS, config.LEARNING_RATE,
@@ -598,7 +620,7 @@ def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, conf
                 acc     = train_correct / max(train_total, 1) * 100
                 elapsed = time.time() - epoch_start
                 ms_per_batch = elapsed / max(batch_idx, 1) * 1000
-                print(f"   Epoch {epoch+1}/{config.EPOCHS} | Batch {batch_idx}/{len(train_loader)} | "
+                print(f"   Epoch {epoch+1}/{config.EPOCHS} | Batch {batch_idx}/{num_batches} | "
                       f"Loss: {loss.item()*accum:.4f} | Acc: {acc:.1f}% | "
                       f"LR: {lr:.2e} | {ms_per_batch:.0f}ms/batch")
 
@@ -610,7 +632,7 @@ def train_model(model, train_loader, val_loader, eval_passwords, tokenizer, conf
             print(f"   Checkpoint sauvegarde!")
             break
 
-        avg_train_loss = train_loss / len(train_loader)
+        avg_train_loss = train_loss / num_batches
         train_acc      = train_correct / max(train_total, 1) * 100
         val_loss, val_acc = evaluate_val(model, val_loader, criterion, device, use_amp)
         elapsed        = time.time() - epoch_start
@@ -874,18 +896,21 @@ def main():
     val_tensor   = tokenizer.encode_all(val_pwds)
     print(f"   Train: {train_tensor.shape} | Val: {val_tensor.shape}")
 
-    train_dataset = PasswordDataset(train_tensor)
-    val_dataset   = PasswordDataset(val_tensor)
+    # Charge tout le dataset train en VRAM une seule fois (zero copie CPU->GPU par batch)
+    print(f"\nChargement tensor train -> {config.DEVICE.upper()}...")
+    t0 = time.time()
+    train_gpu = train_tensor.to(config.DEVICE, dtype=torch.long)
+    vram_mb   = train_gpu.element_size() * train_gpu.nelement() / 1024 / 1024
+    print(f"   {vram_mb:.0f} MB charges en {time.time()-t0:.1f}s — zero copie par batch desormais")
+    del train_tensor  # libere la RAM CPU
 
-    train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE,
-                              shuffle=True, num_workers=0, pin_memory=True,
-                              drop_last=True)
+    val_dataset  = PasswordDataset(val_tensor)
     val_loader   = DataLoader(val_dataset, batch_size=config.BATCH_SIZE * 2,
                               shuffle=False, num_workers=0, pin_memory=True)
 
     if not generate_only:
         history, optimizer, early_stopping, scaler = train_model(
-            model, train_loader, val_loader, eval_pwds, tokenizer, config,
+            model, train_gpu, val_loader, eval_pwds, tokenizer, config,
             start_epoch, global_step, best_val_loss, history, optimizer,
             early_stopping, scaler
         )
