@@ -181,7 +181,7 @@ def gpu_batch_iter(tensor, batch_size, drop_last=True):
     for start in range(0, end, batch_size):
         idx = indices[start:start + batch_size]
         batch = tensor[idx]          # [B, seq_len], deja sur GPU
-        yield batch[:, :-1], batch[:, 1:]
+        yield batch[:, :-1].contiguous(), batch[:, 1:].contiguous()
 
 # ============================================================
 # ARCHITECTURE (identique v5: RMSNorm + SwiGLU + SDPA + KV-cache)
