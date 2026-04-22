@@ -847,11 +847,10 @@ def main():
     val_dataset   = PasswordDataset(val_tensor)
 
     train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE,
-                              shuffle=True, num_workers=2, pin_memory=True,
-                              drop_last=True, persistent_workers=True)
+                              shuffle=True, num_workers=0, pin_memory=True,
+                              drop_last=True)
     val_loader   = DataLoader(val_dataset, batch_size=config.BATCH_SIZE * 2,
-                              shuffle=False, num_workers=2, pin_memory=True,
-                              persistent_workers=True)
+                              shuffle=False, num_workers=0, pin_memory=True)
 
     if not generate_only:
         history, optimizer, early_stopping, scaler = train_model(
