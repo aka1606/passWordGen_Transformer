@@ -20,5 +20,5 @@ source /usr/local/anaconda3/etc/profile.d/conda.sh
 conda activate pwdgen
 
 echo "=== Debut entrainement: $(date) ==="
-python3 scripts/training/train_server.py 2>&1
+python3 -u scripts/training/train_server.py 2>&1
 echo "=== Fin: $(date) ==="
