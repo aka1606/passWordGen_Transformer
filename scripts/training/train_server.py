@@ -794,18 +794,24 @@ def main():
     reset         = '--reset' in sys.argv
     generate_only = '--generate-only' in sys.argv
 
-    # Creer le dossier fast (RAM disk) et copier checkpoint existant si besoin
+    import shutil
     NFS_MODEL = os.path.join(config.BASE_DIR, 'output', 'models', 'v6_model.pt')
     NFS_CKPT  = os.path.join(config.BASE_DIR, 'output', 'models', 'v6_checkpoint.pt')
     os.makedirs(config._FAST_DIR, exist_ok=True)
-    if not os.path.exists(config.CHECKPOINT_PATH) and os.path.exists(NFS_CKPT):
-        import shutil
-        print(f"Copie checkpoint NFS -> RAM disk ({NFS_CKPT} -> {config.CHECKPOINT_PATH})")
-        shutil.copy2(NFS_CKPT, config.CHECKPOINT_PATH)
-    if not os.path.exists(config.MODEL_PATH) and os.path.exists(NFS_MODEL):
-        import shutil
-        print(f"Copie model NFS -> RAM disk")
+    # En mode generate-only, toujours forcer le modele NFS (evite /dev/shm perime)
+    if generate_only and os.path.exists(NFS_MODEL):
         shutil.copy2(NFS_MODEL, config.MODEL_PATH)
+        print(f"Copie modele NFS -> RAM disk (generate-only)")
+    if generate_only and os.path.exists(NFS_CKPT):
+        shutil.copy2(NFS_CKPT, config.CHECKPOINT_PATH)
+        print(f"Copie checkpoint NFS -> RAM disk (generate-only)")
+    if not generate_only:
+        if not os.path.exists(config.CHECKPOINT_PATH) and os.path.exists(NFS_CKPT):
+            print(f"Copie checkpoint NFS -> RAM disk")
+            shutil.copy2(NFS_CKPT, config.CHECKPOINT_PATH)
+        if not os.path.exists(config.MODEL_PATH) and os.path.exists(NFS_MODEL):
+            print(f"Copie model NFS -> RAM disk")
+            shutil.copy2(NFS_MODEL, config.MODEL_PATH)
 
     print("=" * 60)
     print(f"PasswordTransformer v{SCRIPT_VERSION} — RockYou 14M")
