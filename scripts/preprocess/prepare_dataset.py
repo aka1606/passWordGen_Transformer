@@ -39,7 +39,10 @@ MIN_LEN, MAX_LEN = 4, 30
 
 
 def is_valid(p):
-    return p and MIN_LEN <= len(p) <= MAX_LEN and p.isprintable()
+    """ASCII printable only (chars 32-126): lettres, chiffres, symboles courants."""
+    if not p or not (MIN_LEN <= len(p) <= MAX_LEN):
+        return False
+    return all(32 <= ord(c) <= 126 for c in p)
 
 
 def load_rockyou_withcount(path, max_repeat=10):
