@@ -42,8 +42,8 @@ class Config:
     DROPOUT     = 0.1
 
     # Entraînement
-    BATCH_SIZE       = 2048
-    GRAD_ACCUM_STEPS = 2
+    BATCH_SIZE       = 1024     # 12L + 25M data sur P100 16GB -> safe
+    GRAD_ACCUM_STEPS = 4        # batch effectif = 4096 (idem v6)
     LEARNING_RATE    = 3e-4
     WEIGHT_DECAY     = 0.01
     EPOCHS           = 120
@@ -167,12 +167,13 @@ class PasswordDataset(Dataset):
 
 
 def gpu_batch_iter(tensor, batch_size, drop_last=True):
+    """Tensor stocké en int16 (compact); conversion en long par batch."""
     n = tensor.size(0)
     perm = torch.randperm(n, device=tensor.device)
     shuffled = tensor[perm]
     end = n - batch_size + 1 if drop_last else n
     for start in range(0, end, batch_size):
-        batch = shuffled[start:start + batch_size]
+        batch = shuffled[start:start + batch_size].long()
         yield batch[:, :-1], batch[:, 1:]
 
 # ============================================================
@@ -901,12 +902,12 @@ def main():
         val_tensor   = tokenizer.encode_all(val_pwds)
         print(f"   Train: {train_tensor.shape} | Val: {val_tensor.shape}")
 
-        print(f"\nChargement tensor train -> {config.DEVICE.upper()}...")
+        print(f"\nChargement tensor train -> {config.DEVICE.upper()} (int16)...")
         t0 = time.time()
-        train_gpu = train_tensor.to(config.DEVICE, dtype=torch.long)
+        train_gpu = train_tensor.to(config.DEVICE)  # garde int16 -> 4x moins de VRAM
         del train_tensor
         vram_mb = train_gpu.element_size() * train_gpu.nelement() / 1024 / 1024
-        print(f"   {vram_mb:.0f} MB charges en {time.time()-t0:.1f}s")
+        print(f"   {vram_mb:.0f} MB charges en {time.time()-t0:.1f}s (int16)")
 
         val_dataset = PasswordDataset(val_tensor)
         val_loader  = DataLoader(val_dataset, batch_size=config.BATCH_SIZE * 2,
