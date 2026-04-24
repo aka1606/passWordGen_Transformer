@@ -1,97 +1,133 @@
-# Projet: Générateur Intelligent de Mots de Passe
+# Générateur de Mots de Passe par Transformer
 
-## 🏗️ Structure Propre
+Système de génération de mots de passe basé sur un Transformer décodeur (GPT-style)
+entraîné sur RockYou + sources externes, augmenté par un moteur de règles de mutation.
+
+---
+
+## 📁 Structure
 
 ```
-/ams-projet2/
-├── README.md                    # Documentation (ce fichier)
+ams-projet2/
+├── README.md
+├── data/
+│   ├── raw/                          # rockyou.txt brut (gitignored)
+│   ├── extra/                        # Sources additionnelles (gitignored)
+│   └── splits/
+│       ├── rockyou_eval.txt          # 143k passwords d'évaluation
+│       ├── rockyou_train.txt         # 14M passwords (gitignored)
+│       └── combined_train.txt        # 25M freq-weighted (gitignored)
 │
-├── 📂 data/                     # Données brutes
-│   ├── vocabulaire.txt          # 375k mots de passe uniques
-│   └── TrainEval/
-│       ├── train.txt            # 375k mots de passe (entraînement)
-│       └── eval.txt             # 2k mots de passe (test)
+├── scripts/
+│   ├── data/
+│   │   ├── download_rockyou.py       # Télécharge RockYou depuis SourceForge
+│   │   ├── download_extra.py         # Télécharge SecLists (Pwdb, 000webhost, phpbb)
+│   │   └── prepare_dataset.py        # Fusionne et prépare combined_train.txt
+│   │
+│   ├── training/
+│   │   ├── train_server.py           # v6: 7M params, RockYou seul
+│   │   ├── train_server_v7.py        # v7: 10.7M params, RoPE, 25M freq-weighted
+│   │   ├── markov_chain.py           # Modèle Markov (baseline)
+│   │   └── transformer_gen.py        # Version locale (Mac)
+│   │
+│   ├── analysis/
+│   │   ├── rules_engine.py           # Moteur de mutation (capitalize, leet, suffixes...)
+│   │   ├── analyse_eval.py
+│   │   ├── analyse_avancee.py
+│   │   ├── pca_clustering.py
+│   │   ├── benchmark.py
+│   │   └── vocab.py
+│   │
+│   ├── slurm/                        # Jobs SLURM pour cluster
+│   │   ├── job.sh                    # Entraînement v6
+│   │   ├── job_v7.sh                 # Entraînement v7
+│   │   ├── generate_job.sh           # Génération v6
+│   │   └── generate_job_v7.sh        # Génération v7
+│   │
+│   └── utils/
+│       ├── setup_env.sh              # Setup conda env
+│       └── setup_server.sh           # Setup cluster
 │
-├── 📂 scripts/                  # Scripts d'analyse
-│   ├── vocab.py                 # Analyse EDA complète
-│   ├── analyse_eval.py          # Comparaison train vs eval
-│   ├── analyse_avancee.py       # Patterns, ngrams, positions
-│   └── benchmark.py             # Benchmark RAM/capacités
+├── docs/
+│   ├── rapport.tex                   # Rapport LaTeX
+│   └── strategie_analyses.md
 │
-├── 📂 analysis/                 # Documentation
-│   └── strategie_analyses.md    # Plan complet du générateur
-│
-└── 📂 output/                   # Résultats des analyses (JSON)
-    ├── stats_analysis.json
-    ├── patterns_analysis.json
-    └── benchmark_results.json
+└── output/
+    ├── models/                       # Checkpoints (.pt, gitignored)
+    ├── generated/                    # Passwords générés (gitignored)
+    └── results/                      # Logs SLURM + JSON (.log gitignored)
 ```
 
 ---
 
-## 📊 Scripts Disponibles
+## 🚀 Pipeline
 
-### 1️⃣ Analyse EDA
-**File:** `scripts/vocab.py` → `output/stats_analysis.json`
-- Statistiques, composition, bigrammes, entropie
+### 1. Préparation des données (sur le cluster)
 
-### 2️⃣ Comparaison Train/Eval
-**File:** `scripts/analyse_eval.py`
-- Différences, force des mots de passe, overlap (0%)
+```bash
+# Télécharger RockYou
+python scripts/data/download_rockyou.py
 
-### 3️⃣ Patterns Avancés
-**File:** `scripts/analyse_avancee.py` → `output/patterns_analysis.json`
-- 4-grams, 5-grams, positions, séquences, années
+# Télécharger les sources additionnelles (SecLists)
+python scripts/data/download_extra.py
 
-### 4️⃣ Benchmark
-**File:** `scripts/benchmark.py` → `output/benchmark_results.json`
-- Mémoire, temps d'entraînement, verdict
+# Fusionner avec freq-weighting
+python scripts/data/prepare_dataset.py --freq-weight --max-repeat 5
+# → data/splits/combined_train.txt (25M passwords)
+```
 
----
+### 2. Entraînement (cluster SLURM)
 
-## 🎯 Insights Clés
+```bash
+sbatch scripts/slurm/job_v7.sh        # 24h job, à relancer
+```
 
-**Composition (375k mots):**
-- 47.67%: Minuscules + Chiffres
-- 33.13%: Minuscules seules
-- 13.98%: Chiffres seuls
+### 3. Génération + évaluation
 
-**Positionnement des Chiffres ⭐:**
-- **41.80%** finissent par chiffre (RÈGLE MAJEURE)
-- 18.53%: commencent par chiffre
+```bash
+sbatch scripts/slurm/generate_job_v7.sh
+# → output/generated/v7_generated.txt
+# → output/results/v7_results.json
+```
 
-**Éléments Courants:**
-- Top 4-grams: 'love' (3007x), '1234' (2623x)
-- Top 5-grams: '12345' (1035x), 'ilove' (656x)
-- Années: 2000, 2007, 2008 (majoritaires)
+### 4. Augmentation par règles
 
----
-
-## 📈 Stats
-
-| Métrique | Valeur |
-|----------|--------|
-| Total | 375,853 |
-| Uniques | 375,819 |
-| Longueur moy | 7.60 |
-| Entropie | 5.11 bits |
-| Caractères uniques | 92 |
+```bash
+python scripts/analysis/rules_engine.py \
+    --input output/generated/v7_generated.txt \
+    --eval data/splits/rockyou_eval.txt
+# → 1M candidats → 134M après mutations
+```
 
 ---
 
-## 💻 Capacités du Mac
+## 🏗️ Architecture v7
 
-**RAM disponible:** 9.8 GB
+| Paramètre | Valeur |
+|-----------|--------|
+| Couches | 12 |
+| Dim embedding | 256 |
+| Têtes | 8 |
+| FFN dim | 768 |
+| Position encoding | **RoPE** (Rotary) |
+| Total paramètres | ~10.7M |
+| Vocabulaire | char-level (~95 tokens) |
 
-| Modèle | Memory | Temps | ✅ Status |
-|--------|--------|-------|-----------|
-| Petit | 0.095 GB | 1h40 | OK |
-| Moyen | 0.196 GB | 4h50 | OK |
-| Grand | 0.425 GB | 13h | OK |
+**Composants** : RMSNorm + SwiGLU + RoPE + SDPA causal + KV-cache + AMP float16
 
 ---
 
-## 📚 Plus d'info
+## 📊 Dataset combiné (25M passwords)
 
-Voir [analysis/strategie_analyses.md](analysis/strategie_analyses.md)
+| Source | Taille | Note |
+|--------|--------|------|
+| RockYou (avec fréquences) | 14.3M | freq-weighted, max_repeat=5 |
+| Pwdb top 10M | 10M | multi-breach compilation |
+| 000webhost | 720k | leak hosting service |
+| phpbb | 184k | leak forum community |
 
+---
+
+## 📚 Rapport
+
+Voir [docs/rapport.tex](docs/rapport.tex) pour les détails complets et résultats.

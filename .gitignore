@@ -11,6 +11,7 @@ __pycache__/
 .Python
 build/
 dist/
+.venv/
 
 # IDE
 .vscode/
@@ -21,6 +22,25 @@ dist/
 .tmp
 temp/
 
-# Donnees lourdes (a generer localement via prepare_data.py)
+# === Données lourdes (régénérables) ===
+# Sources brutes (à télécharger via scripts/data/download_*.py)
 data/raw/
+data/extra/
+
+# Splits volumineux (à regénérer via scripts/data/prepare_dataset.py)
 data/splits/rockyou_train.txt
+data/splits/combined_train.txt
+data/splits/combined_eval.txt
+
+# === Sorties (lourdes) ===
+output/models/*.pt
+output/generated/*.txt
+output/results/slurm_*.log
+output/results/slurm_*.err
+
+# LaTeX
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz

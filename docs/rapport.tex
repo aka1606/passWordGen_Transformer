@@ -1,0 +1,314 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+
+\geometry{margin=2.5cm}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true
+}
+
+\title{\textbf{Génération de Mots de Passe par Transformer}\\
+\large Apprentissage automatique appliqué à la sécurité}
+\author{Akselalik Alik}
+\date{Avril 2026}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Introduction}
+
+L'objectif de ce projet est de concevoir un système de génération automatique de mots de passe capable de couvrir une large base de données de mots de passe réels. L'approche repose sur un modèle de type Transformer entraîné sur le dataset RockYou, combiné à un moteur de règles de mutation pour maximiser la couverture.
+
+Le problème central est le suivant : étant donné un ensemble de mots de passe cibles, générer un ensemble de candidats qui maximise le taux de correspondance (\textit{coverage}).
+
+% ============================================================
+\section{Dataset}
+
+\subsection{RockYou}
+
+Le dataset utilisé est \textbf{RockYou}, une des fuites de mots de passe les plus connues, contenant environ 14 millions de mots de passe uniques issus d'une violation de données réelle en 2009.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Caractéristique} & \textbf{Valeur} \\
+\midrule
+Mots de passe bruts & 14 194 508 \\
+Mots de passe uniques (après nettoyage) & 14 194 508 \\
+Split entraînement & 13 910 618 (98\%) \\
+Split évaluation & 143 378 (1\%) \\
+Longueur min/max & 4 à 30 caractères \\
+\bottomrule
+\end{tabular}
+\caption{Statistiques du dataset RockYou}
+\end{table}
+
+\subsection{Préparation des données}
+
+Les données sont téléchargées, décompressées et nettoyées automatiquement via un script Python. Les mots de passe sont filtrés (longueur 4--30, caractères imprimables), dédupliqués, puis répartis en splits train/eval.
+
+% ============================================================
+\section{Architecture du Modèle}
+
+\subsection{Transformer décodeur (GPT-style)}
+
+Le modèle est un Transformer de type décodeur (\textit{decoder-only}), similaire à GPT, opérant au niveau caractère. Chaque mot de passe est représenté comme une séquence de tokens caractères.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Hyperparamètre} & \textbf{Valeur} \\
+\midrule
+Nombre de couches & 8 \\
+Dimension d'embedding & 256 \\
+Nombre de têtes d'attention & 8 \\
+Dimension FFN (SwiGLU) & 768 \\
+Longueur de séquence max & 32 \\
+Dropout & 0.1 \\
+Paramètres totaux & 6 998 272 ($\approx$ 7M) \\
+\bottomrule
+\end{tabular}
+\caption{Architecture du Transformer v6}
+\end{table}
+
+\subsection{Composants clés}
+
+\begin{itemize}
+    \item \textbf{RMSNorm} : normalisation plus stable que LayerNorm
+    \item \textbf{SwiGLU FFN} : fonction d'activation améliorée (SiLU + gating)
+    \item \textbf{SDPA avec masque causal} : attention efficace via \texttt{scaled\_dot\_product\_attention}
+    \item \textbf{Weight tying} : partage des poids entre embedding et couche de sortie
+    \item \textbf{KV-cache} : accélération de la génération séquentielle
+\end{itemize}
+
+% ============================================================
+\section{Entraînement}
+
+\subsection{Infrastructure}
+
+L'entraînement a été effectué sur le cluster de calcul de l'université (Heracles/Achille) via le gestionnaire de jobs SLURM.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Ressource} & \textbf{Valeur} \\
+\midrule
+GPU & Tesla P100-PCIE-16GB \\
+CUDA & 12.1 \\
+RAM allouée & 32 GB \\
+Temps max par job & 24 heures \\
+Framework & PyTorch 2.x \\
+\bottomrule
+\end{tabular}
+\caption{Infrastructure d'entraînement}
+\end{table}
+
+\subsection{Paramètres d'entraînement}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Paramètre} & \textbf{Valeur} \\
+\midrule
+Batch size & 2048 \\
+Gradient accumulation & 2 (batch effectif = 4096) \\
+Learning rate initial & $3 \times 10^{-4}$ \\
+Schedule LR & Cosine warm restarts \\
+Optimizer & AdamW ($\beta_1=0.9$, $\beta_2=0.95$) \\
+Weight decay & 0.01 \\
+Gradient clipping & 1.0 \\
+Label smoothing & 0.05 \\
+AMP (float16) & Oui \\
+Early stopping patience & 8 epochs \\
+\bottomrule
+\end{tabular}
+\caption{Hyperparamètres d'entraînement}
+\end{table}
+
+\subsection{Optimisations techniques}
+
+Plusieurs optimisations ont été mises en place pour accélérer l'entraînement sur NFS :
+
+\begin{itemize}
+    \item \textbf{GPU-resident data} : le dataset d'entraînement complet (3.4 GB) est chargé en VRAM une seule fois, éliminant les transferts CPU$\rightarrow$GPU par batch
+    \item \textbf{Checkpoints sur RAM disk} : sauvegarde dans \texttt{/dev/shm} (63 GB disponibles) avec synchronisation NFS toutes les 3 epochs
+    \item \textbf{AMP float16} : précision mixte pour réduire l'empreinte mémoire et accélérer le calcul
+    \item \textbf{Shuffle-once par epoch} : permutation aléatoire globale pour un accès séquentiel cache-friendly
+\end{itemize}
+
+\subsection{Progression de l'entraînement}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrrr}
+\toprule
+\textbf{Epoch} & \textbf{Val Loss} & \textbf{Val Acc} & \textbf{Temps/epoch} \\
+\midrule
+11 & 2.8126 & 30.6\% & $\approx$75 min \\
+17 & 2.8005 & 31.1\% & $\approx$75 min \\
+25 & \textbf{2.7983} & \textbf{31.2\%} & $\approx$75 min \\
+\bottomrule
+\end{tabular}
+\caption{Progression de l'entraînement — meilleur modèle à epoch 25}
+\end{table}
+
+% ============================================================
+\section{Génération de mots de passe}
+
+\subsection{Stratégie de génération}
+
+La génération utilise un échantillonnage autorégressif avec :
+\begin{itemize}
+    \item \textbf{Température} : $T = 0.7$ (conservative, favorise les patterns fréquents)
+    \item \textbf{Top-K} : $K = 50$
+    \item \textbf{Top-P (nucleus sampling)} : $P = 0.92$
+    \item \textbf{KV-cache} pour une génération batch efficace
+\end{itemize}
+
+\subsection{Distribution des mots de passe générés}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrr}
+\toprule
+\textbf{Type} & \textbf{Nombre} & \textbf{Pourcentage} \\
+\midrule
+Numériques purs & 240 911 & 23.9\% \\
+Alphabétiques purs & 291 965 & 29.0\% \\
+Mixtes (alphanum + symboles) & 474 300 & 47.1\% \\
+\midrule
+\textbf{Total} & \textbf{1 007 176} & \textbf{100\%} \\
+\bottomrule
+\end{tabular}
+\caption{Distribution des mots de passe générés (1M candidats, epoch 10)}
+\end{table}
+
+% ============================================================
+\section{Moteur de Règles (Rules Engine)}
+
+\subsection{Principe}
+
+Le moteur de règles applique des mutations systématiques sur les mots de passe générés afin d'augmenter le nombre de candidats sans régénérer. Les règles s'inspirent des pratiques réelles de création de mots de passe.
+
+\subsection{Règles appliquées}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llr}
+\toprule
+\textbf{Règle} & \textbf{Exemple} & \textbf{Contribution} \\
+\midrule
+Original & \texttt{password} & principale \\
+Capitalize & \texttt{Password} & +24\% relatif \\
+Upper & \texttt{PASSWORD} & +33\% relatif \\
+Leet speak léger & \texttt{p@ssw0rd} & +16\% relatif \\
+Leet speak complet & \texttt{p@\$\$w0rd} & +11\% relatif \\
+Suffix numérique & \texttt{password1}, \texttt{password123} & variable \\
+Suffix symbole & \texttt{password!} & faible \\
+Suffix année & \texttt{password2024} & faible \\
+Préfixe & \texttt{123password} & faible \\
+Doublement & \texttt{passwordpassword} & faible \\
+\bottomrule
+\end{tabular}
+\caption{Règles de mutation et leur contribution relative}
+\end{table}
+
+\subsection{Résultats du moteur de règles}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrr}
+\toprule
+\textbf{Étape} & \textbf{Candidats} & \textbf{Coverage} \\
+\midrule
+Génération brute (1M) & 1 007 176 & 1.84\% \\
+Après rules engine & 134 442 970 & 3.52\% \\
+\midrule
+\textbf{Facteur d'amplification} & \textbf{$\times$133} & \textbf{$+$91\%} \\
+\bottomrule
+\end{tabular}
+\caption{Impact du moteur de règles — modèle epoch 10}
+\end{table}
+
+% ============================================================
+\section{Résultats Finaux}
+
+\textit{Cette section sera complétée avec les résultats du modèle final (epoch 25).}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrr}
+\toprule
+\textbf{Configuration} & \textbf{Candidats} & \textbf{Coverage} \\
+\midrule
+Modèle epoch 10 brut & 1 007 176 & 1.84\% \\
+Modèle epoch 10 + rules & 134 442 970 & 3.52\% \\
+Modèle epoch 25 brut & À compléter & À compléter \\
+Modèle epoch 25 + rules & À compléter & À compléter \\
+\bottomrule
+\end{tabular}
+\caption{Résultats comparatifs}
+\end{table}
+
+\subsection{Analyse qualitative}
+
+Exemples de mots de passe générés correspondant à l'ensemble d'évaluation :
+
+\begin{lstlisting}
+shaydel, williams06, kanari, freefree01, lizziejade,
+michi1993, jhalissa, Greyhounds24, December72, bangor123,
+samisami11, mylife06, TOMMY90, MOUSE24, topher45, devils27
+\end{lstlisting}
+
+Ces exemples montrent que le modèle a appris des patterns réalistes : prénoms, mots communs, combinaisons alphanumérique typiques des utilisateurs.
+
+% ============================================================
+\section{Discussion}
+
+\subsection{Limites}
+
+\begin{itemize}
+    \item La val loss converge lentement (2.81 → 2.80 en 14 epochs) — le dataset est trop diversifié pour être parfaitement modélisé avec 7M paramètres
+    \item Le modèle génère une proportion élevée de séquences numériques (dates) qui bénéficient peu des règles de mutation
+    \item La température optimale (0.7) favorise les patterns fréquents au détriment de la diversité
+\end{itemize}
+
+\subsection{Améliorations possibles}
+
+\begin{itemize}
+    \item \textbf{Architecture plus grande} : 70M+ paramètres avec un GPU plus puissant (A100)
+    \item \textbf{Données supplémentaires} : combiner RockYou avec d'autres datasets de fuites
+    \item \textbf{Règles ciblées} : analyser les patterns manqués et créer des règles spécifiques
+    \item \textbf{Combinaison Markov + Transformer} : union des deux ensembles générés
+    \item \textbf{Fine-tuning par domaine} : adapter le modèle à des politiques de mots de passe spécifiques
+\end{itemize}
+
+% ============================================================
+\section{Conclusion}
+
+Ce projet a permis de développer un système complet de génération de mots de passe basé sur un Transformer entraîné sur RockYou 14M. Le pipeline complet (génération + moteur de règles) atteint \textbf{3.52\% de coverage} sur l'ensemble d'évaluation avec 134M candidats générés à partir de 1M de mots de passe de base.
+
+Les résultats finaux avec le modèle epoch 25 seront présentés dans la section 7.
+
+\end{document}
