@@ -13,8 +13,8 @@ Sortie:
   - data/splits/combined_eval.txt   → évaluation (143k passwords, inchangé)
 
 Usage:
-    python scripts/data/prepare_dataset.py
-    python scripts/data/prepare_dataset.py --freq-weight --max-repeat 10
+    python scripts/preprocess/prepare_dataset.py
+    python scripts/preprocess/prepare_dataset.py --freq-weight --max-repeat 10
 """
 
 import os, argparse, random, re

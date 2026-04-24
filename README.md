@@ -19,7 +19,7 @@ ams-projet2/
 │       └── combined_train.txt        # 25M freq-weighted (gitignored)
 │
 ├── scripts/
-│   ├── data/
+│   ├── preprocess/
 │   │   ├── download_rockyou.py       # Télécharge RockYou depuis SourceForge
 │   │   ├── download_extra.py         # Télécharge SecLists (Pwdb, 000webhost, phpbb)
 │   │   └── prepare_dataset.py        # Fusionne et prépare combined_train.txt
@@ -66,13 +66,13 @@ ams-projet2/
 
 ```bash
 # Télécharger RockYou
-python scripts/data/download_rockyou.py
+python scripts/preprocess/download_rockyou.py
 
 # Télécharger les sources additionnelles (SecLists)
-python scripts/data/download_extra.py
+python scripts/preprocess/download_extra.py
 
 # Fusionner avec freq-weighting
-python scripts/data/prepare_dataset.py --freq-weight --max-repeat 5
+python scripts/preprocess/prepare_dataset.py --freq-weight --max-repeat 5
 # → data/splits/combined_train.txt (25M passwords)
 ```
 

@@ -2,7 +2,7 @@
 Télécharge les sources de passwords additionnelles (SecLists, etc.)
 À lancer une fois sur le cluster avant prepare_dataset.py.
 
-Usage: python scripts/data/download_extra.py
+Usage: python scripts/preprocess/download_extra.py
 """
 
 import os, urllib.request, tarfile, time
@@ -81,7 +81,7 @@ def main():
         size_mb = os.path.getsize(os.path.join(EXTRA_DIR, f)) / 1024 / 1024
         print(f"   {f:40s} {size_mb:8.1f} MB")
     print(f"{'='*60}")
-    print("\nProchaine étape: python scripts/data/prepare_dataset.py --freq-weight")
+    print("\nProchaine étape: python scripts/preprocess/prepare_dataset.py --freq-weight")
 
 
 if __name__ == '__main__':
