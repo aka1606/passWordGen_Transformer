@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Prépare le dataset d'entraînement combiné.
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Télécharge les sources de passwords additionnelles (SecLists, etc.)
 À lancer une fois sur le cluster avant prepare_dataset.py.
