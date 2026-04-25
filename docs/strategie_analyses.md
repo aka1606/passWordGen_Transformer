@@ -1,142 +1,164 @@
-# Stratégie pour Générateur de Mots de Passe Intelligent
+# Strategie pour generateur de mots de passe intelligent
 
-## 1. **PATTERNS STRUCTURELS** 🏗️ (PRIORITÉ 1)
-```
-Analyser les patterns qui répètent:
-- [Mot dict] + [Chiffres]  (ex: password123)
-- [Minuscules] + [Majuscule début] + [Chiffres]  (ex: Admin2021)
-- [Mots multiple] concat  (ex: correcthorsebattery)
-- Substitutions leet (ex: P@ssw0rd - a->@, o->0, l->1)
-- Patterns keyboard (ex: qwerty, asdfgh, 1234)
-```
-→ **Résultat:** Rules engine pour générer des variantes
+## 1. Patterns structurels (priorite 1)
 
----
+```
+Analyser les patterns recurrents :
+- [Mot dictionnaire] + [Chiffres]  (ex: password123)
+- [Minuscules] + [Majuscule debut] + [Chiffres]  (ex: Admin2021)
+- [Mots multiples] concatenes  (ex: correcthorsebattery)
+- Substitutions leet  (ex: P@ssw0rd : a -> @, o -> 0, l -> 1)
+- Patterns clavier  (ex: qwerty, asdfgh, 1234)
+```
 
-## 2. **WORDLIST & DICTIONNAIRE** 📚 (PRIORITÉ 1)
-```
-Extraire les mots réels du vocabulaire (vocabulaire.txt):
-- Mots de passe pur texte (sans chiffres ni spéciaux)
-- Fréquence des mots complets
-- Utiliser pour base + variantes
-```
-→ **Résultat:** Base de mots + transformations
+Resultat : moteur de regles pour generer des variantes.
 
 ---
 
-## 3. **CHAÎNES MARKOV** 🔗 (PRIORITÉ 2)
+## 2. Wordlist et dictionnaire (priorite 1)
+
 ```
-Modèle probabiliste de transitions:
-- Bigrammes/Trigrammes (déjà en partie fait)
-- Matrice de probabilité: char[i] → char[i+1]
-- Générer des séquences réalistes
+Extraire les mots reels du vocabulaire :
+- Mots de passe en pur texte (sans chiffres ni speciaux)
+- Frequence des mots complets
+- Utiliser comme base pour les variantes
 ```
-→ **Résultat:** Générateur pseudo-aléatoire réaliste
+
+Resultat : base de mots et transformations associees.
 
 ---
 
-## 4. **POSITIONS DE CARACTÈRES** 📍 (PRIORITÉ 2)
+## 3. Chaines de Markov (priorite 2)
+
 ```
-Où apparaissent les caractères spéciaux/chiffres?
-- Au début/fin (très courant)
-- Entre 2 groupes de lettres
-- À des positions spécifiques
+Modele probabiliste de transitions :
+- Bigrammes et trigrammes (deja partiellement fait)
+- Matrice de probabilite : char[i] -> char[i+1]
+- Generer des sequences realistes
 ```
-→ **Résultat:** Heuristiques positionnelles
+
+Resultat : generateur pseudo-aleatoire realiste.
 
 ---
 
-## 5. **SOUS-CHAÎNES COURANTES** 🔍 (PRIORITÉ 2)
+## 4. Positions de caracteres (priorite 2)
+
 ```
-Extraire les 4-5 char substrings courants:
+Analyser ou apparaissent les caracteres speciaux et chiffres :
+- Au debut ou en fin (tres courant)
+- Entre deux groupes de lettres
+- A des positions specifiques
+```
+
+Resultat : heuristiques positionnelles.
+
+---
+
+## 5. Sous-chaines courantes (priorite 2)
+
+```
+Extraire les substrings de 4-5 caracteres frequents :
 - "1234", "123", "000", "999"
 - "pass", "admin", "test", "user"
-- Bigrammes qui répètent
+- Bigrammes recurrents
 ```
-→ **Résultat:** Fragments à combiner intelligemment
+
+Resultat : fragments a combiner intelligemment.
 
 ---
 
-## 6. **TRANSFORMATIONS COURANTES** 🔄 (PRIORITÉ 3)
+## 6. Transformations courantes (priorite 3)
+
 ```
-- Capitalisation patterns (1ère lettre, 1ère + dernière)
-- Leet speak courant (3->E, 4->A, 0->O, 1->I/L)
-- Replacements simples (@, !, $)
-- Années (1990-2025)
-- Doublons de caractères (ll, ss, ee)
+- Patterns de capitalisation (1ere lettre, 1ere et derniere)
+- Leet speak courant (3 -> E, 4 -> A, 0 -> O, 1 -> I/L)
+- Substitutions simples (@, !, $)
+- Annees (1990-2025)
+- Doublons de caracteres (ll, ss, ee)
 ```
-→ **Résultat:** Règles de mutation
+
+Resultat : regles de mutation.
 
 ---
 
-## 7. **SÉQUENCES NUMÉRIQUES** 🔢 (PRIORITÉ 2)
+## 7. Sequences numeriques (priorite 2)
+
 ```
-- Années populaires (1990-2024)
-- Séquences (123, 456, 789, 1234, 9999)
+- Annees populaires (1990-2024)
+- Sequences (123, 456, 789, 1234, 9999)
 - Doublons (11, 22, 33, ... 99)
-- Compter la fréquence
+- Comptage des frequences
 ```
-→ **Résultat:** Injection ciblée de chiffres
+
+Resultat : injection ciblee de chiffres.
 
 ---
 
-## 8. **ENTROPIE PAR CLASSE** 📊 (PRIORITÉ 3)
+## 8. Entropie par classe (priorite 3)
+
 ```
-Analyser separately:
-- Mots entièrement minuscules
-- Alphanumérique simple
+Analyser separement :
+- Mots entierement minuscules
+- Alphanumerique simple
 - Avec majuscules
-- Avec spéciaux
-Générer selon la distribution observée
+- Avec speciaux
+
+Generer selon la distribution observee.
 ```
-→ **Résultat:** Stratégie de classe appropriée
+
+Resultat : strategie adaptee a chaque classe.
 
 ---
 
-## 9. **CLUSTERISATION DE PATTERNS** 🎯 (PRIORITÉ 3)
+## 9. Clustering de patterns (priorite 3)
+
 ```
-Grouper par pattern similaire:
-- Groupe "noms + années"
+Grouper par pattern similaire :
+- Groupe "noms + annees"
 - Groupe "clavier"
 - Groupe "noms communs"
-- Groupe "aléatoire complet"
-→ Générer par cluster avec poids probabiliste
+- Groupe "aleatoire complet"
+
+Generer par cluster avec poids probabiliste.
 ```
 
 ---
 
-## 10. **ANALYSE NGRAM AVANCÉE** 🔀 (PRIORITÉ 1)
+## 10. Analyse n-gram avancee (priorite 1)
+
 ```
-Au-delà des bigrammes/trigrammes:
+Au-dela des bigrammes et trigrammes :
 - 4-grams, 5-grams courants
-- Modèle probabiliste complet
-- Markov chain d'ordre 3-4
+- Modele probabiliste complet
+- Markov chain d'ordre 3 ou 4
 ```
-→ **Résultat:** Générateur contextuel puissant
+
+Resultat : generateur contextuel puissant.
 
 ---
 
-## ORDRE D'IMPLÉMENTATION RECOMMANDÉ:
+## Ordre d'implementation recommande
 
-### Phase 1 (Analyses fondamentales):
-1. ✅ Analyse basique (FAIT)
+### Phase 1 (analyses fondamentales)
+1. Analyse basique (fait)
 2. Extraire wordlist propre du vocabulaire
-3. Ngrams avancés (4-5 grams)
+3. N-grams avances (4-5 grams)
 4. Patterns structurels courants
 
-### Phase 2 (Modèle intelligent):
-5. Markov chains
-6. Positions de caractères spéciaux/chiffres
+### Phase 2 (modele intelligent)
+5. Chaines de Markov
+6. Positions des caracteres speciaux et chiffres
 7. Transformations courantes
 
-### Phase 3 (Générateur):
-8. Builder qui combine tout
-9. Validation contre données réelles
+### Phase 3 (generateur)
+8. Builder qui combine toutes les approches
+9. Validation contre donnees reelles
 10. Optimisation par coverage
 
 ---
 
-## MÉTRIQUE DE SUCCÈS:
-- **Coverage:** % de mots de passe réels du test qu'on peut générer/matcher
-- **Diversité:** Nombre unique de candidats générés
-- **Similarité:** À quel point les générés ressemblent aux réels
+## Metriques de succes
+
+- Coverage : pourcentage de mots de passe reels du test que l'on peut generer ou matcher.
+- Diversite : nombre unique de candidats generes.
+- Similarite : ressemblance entre les generes et les reels.
