@@ -60,80 +60,79 @@ def leet(pwd, leet_map):
     return ''.join(result)
 
 
-def apply_rules(base_passwords, verbose=True):
+def generate_variants(pwd):
+    """Genere toutes les variantes d'un password."""
+    if not pwd or not is_valid(pwd):
+        return
+    cap = pwd.capitalize()
+    low = pwd.lower()
+    upp = pwd.upper()
+    toggled = ''.join(c.upper() if j % 2 == 0 else c.lower() for j, c in enumerate(pwd))
+    leet_full  = leet(pwd, LEET_MAP)
+    leet_light = leet(pwd, LEET_MAP_LIGHT)
+    leet_cap   = leet(cap, LEET_MAP_LIGHT)
+
+    variants = [pwd, cap, low, upp, leet_full, leet_light, leet_cap, toggled]
+    if len(pwd) >= 2:
+        variants.append(pwd[:-1] + pwd[-1].upper())
+    for s in SUFFIXES:
+        variants += [pwd + s, cap + s, low + s]
+    for s in ['1', '123', '!', '1!', '2024', '2023']:
+        variants += [leet_light + s, leet_cap + s]
+    for p in PREFIXES:
+        variants += [p + pwd, p + cap]
+    if len(pwd) <= 8:
+        variants += [pwd + pwd, cap + pwd]
+
+    for v in variants:
+        if is_valid(v):
+            yield v
+
+
+def apply_rules(base_passwords, verbose=True, eval_set=None):
     """
     Applique toutes les mutations sur base_passwords.
-    Retourne un set de candidats (inclut les originaux).
+    Si eval_set fourni: mode streaming (RAM constante), retourne matches uniquement.
+    Sinon: retourne le set complet (attention RAM).
     """
     t0 = time.time()
-    candidates = set()
     total = len(base_passwords)
+    total_candidates = 0
 
     if verbose:
         print(f"   Base: {total:,} passwords")
         print(f"   Application des regles...")
 
-    for i, pwd in enumerate(base_passwords):
-        if not pwd or not is_valid(pwd):
-            continue
-
-        # Original
-        candidates.add(pwd)
-
-        # --- Capitalisation ---
-        cap = pwd.capitalize()                        # Password
-        upp = pwd.upper()                             # PASSWORD
-        low = pwd.lower()                             # password
-        candidates.update([cap, upp, low])
-
-        # Premiere lettre majuscule + derniere majuscule
-        if len(pwd) >= 2:
-            candidates.add(pwd[:-1] + pwd[-1].upper())   # passworD
-
-        # Toggle: alterne maj/min
-        toggled = ''.join(c.upper() if j % 2 == 0 else c.lower() for j, c in enumerate(pwd))
-        candidates.add(toggled)                           # PaSsWoRd
-
-        # --- Leet speak ---
-        leet_full  = leet(pwd, LEET_MAP)
-        leet_light = leet(pwd, LEET_MAP_LIGHT)
-        leet_cap   = leet(cap, LEET_MAP_LIGHT)
-        candidates.update([leet_full, leet_light, leet_cap])
-
-        # --- Suffixes ---
-        for s in SUFFIXES:
-            candidates.add(pwd + s)
-            candidates.add(cap + s)          # Password123
-            candidates.add(low + s)
-
-        # Leet + suffixes courts (les plus frequents seulement)
-        for s in ['1', '123', '!', '1!', '2024', '2023']:
-            candidates.add(leet_light + s)
-            candidates.add(leet_cap + s)
-
-        # --- Prefixes ---
-        for p in PREFIXES:
-            candidates.add(p + pwd)
-            candidates.add(p + cap)
-
-        # --- Doublement ---
-        if len(pwd) <= 8:
-            candidates.add(pwd + pwd)            # passwordpassword
-            candidates.add(cap + pwd)            # Passwordpassword
-
-        if verbose and (i + 1) % 100_000 == 0:
-            elapsed = time.time() - t0
-            print(f"   {i+1:,}/{total:,} ({(i+1)/total*100:.0f}%) | "
-                  f"{len(candidates):,} candidats | {elapsed:.0f}s")
-
-    # Filtre longueur et printable
-    candidates = {p for p in candidates if is_valid(p)}
-
-    elapsed = time.time() - t0
-    if verbose:
-        print(f"   Done en {elapsed:.0f}s → {len(candidates):,} candidats uniques")
-
-    return candidates
+    if eval_set is not None:
+        # Mode streaming: RAM constante, on check contre eval a la volee
+        matches = set()
+        for i, pwd in enumerate(base_passwords):
+            for v in generate_variants(pwd):
+                total_candidates += 1
+                if v in eval_set:
+                    matches.add(v)
+            if verbose and (i + 1) % 100_000 == 0:
+                elapsed = time.time() - t0
+                print(f"   {i+1:,}/{total:,} ({(i+1)/total*100:.0f}%) | "
+                      f"{total_candidates:,} candidats | {elapsed:.0f}s")
+        elapsed = time.time() - t0
+        if verbose:
+            print(f"   Done en {elapsed:.0f}s → {total_candidates:,} candidats, {len(matches):,} matches")
+        return matches, total_candidates
+    else:
+        # Mode classique: accumule tout (attention RAM pour gros volumes)
+        candidates = set()
+        for i, pwd in enumerate(base_passwords):
+            for v in generate_variants(pwd):
+                candidates.add(v)
+            if verbose and (i + 1) % 100_000 == 0:
+                elapsed = time.time() - t0
+                print(f"   {i+1:,}/{total:,} ({(i+1)/total*100:.0f}%) | "
+                      f"{len(candidates):,} candidats | {elapsed:.0f}s")
+        elapsed = time.time() - t0
+        if verbose:
+            print(f"   Done en {elapsed:.0f}s → {len(candidates):,} candidats uniques")
+        return candidates
 
 
 # ============================================================
@@ -251,32 +250,38 @@ def main():
     if args.analysis and eval_pwds:
         coverage_by_rule(base_pwds, eval_pwds)
 
-    # Appliquer les regles
+    # Appliquer les regles (mode streaming si eval disponible)
     print(f"\nApplication des regles sur {len(base_pwds):,} passwords...")
-    augmented = apply_rules(base_pwds, verbose=True)
+    eval_set = set(eval_pwds) if eval_pwds else None
 
-    # Coverage apres regles
-    if eval_pwds:
-        pct_after, matches = evaluate_coverage(augmented, eval_pwds, "APRES regles")
+    if eval_set:
+        # Mode streaming: RAM constante, seuls les matches sont gardés
+        matches, total_candidates = apply_rules(base_pwds, verbose=True, eval_set=eval_set)
+        pct_after = len(matches) / len(eval_set) * 100
+        print(f"\n   [APRES regles] Coverage: {len(matches):,}/{len(eval_set):,} = {pct_after:.2f}%")
+        if matches:
+            examples = random.sample(sorted(matches), min(10, len(matches)))
+            print(f"   Exemples: {examples}")
+    else:
+        augmented = apply_rules(base_pwds, verbose=True)
+        matches = set()
+        total_candidates = len(augmented)
+        pct_after = 0.0
 
-    # Sauvegarder
-    if not args.no_save:
+    # Sauvegarder (uniquement les matches si mode streaming)
+    if not args.no_save and matches:
         os.makedirs(os.path.dirname(args.output), exist_ok=True)
         with open(args.output, 'w', encoding='utf-8') as f:
-            if eval_pwds and matches:
-                f.write(f"# MATCHES: {len(matches):,}/{len(eval_pwds):,} = {pct_after:.2f}%\n")
-                for p in sorted(matches):
-                    f.write(p + '\n')
-                f.write(f"\n# TOUS ({len(augmented):,} uniques)\n")
-            for p in sorted(augmented):
+            f.write(f"# MATCHES: {len(matches):,}/{len(eval_pwds):,} = {pct_after:.2f}%\n")
+            for p in sorted(matches):
                 f.write(p + '\n')
         print(f"\n   Sauvegarde: {args.output}")
 
     print(f"\n{'='*60}")
     print(f"RESUME")
     print(f"   Base:      {len(base_pwds):,} passwords")
-    print(f"   Augmente:  {len(augmented):,} candidats")
-    print(f"   Facteur:   x{len(augmented)/max(len(base_pwds),1):.1f}")
+    print(f"   Augmente:  {total_candidates:,} candidats")
+    print(f"   Facteur:   x{total_candidates/max(len(base_pwds),1):.1f}")
     if eval_pwds:
         print(f"   Coverage:  {pct_after:.2f}%")
     print(f"{'='*60}")
