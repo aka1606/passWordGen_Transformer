@@ -1,16 +1,17 @@
+# -*- coding: utf-8 -*-
 """
-Coverage curve analysis — teste le coverage à différentes échelles de candidats.
+Coverage curve analysis - teste le coverage a differentes echelles de candidats.
 
-Usage (local, petit dataset):
-    python scripts/analysis/coverage_curve.py \
+Usage (local):
+    python3 scripts/analysis/coverage_curve.py \
         --generated output/generated/generated_passwords.txt \
         --eval data/splits/rockyou_eval.txt
 
 Usage (cluster, 1M+ candidats):
-    python scripts/analysis/coverage_curve.py \
+    python3 scripts/analysis/coverage_curve.py \
         --generated output/generated/v7_generated.txt \
         --eval data/splits/rockyou_eval.txt \
-        --rules  # applique aussi le rules engine sur chaque palier
+        --rules
 """
 
 import os, sys, argparse, random, json, time
@@ -18,7 +19,7 @@ from itertools import product
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── Rules engine inline (même logique que rules_engine.py) ──────────────────
+# Rules engine inline (meme logique que rules_engine.py)
 
 LEET_MAP_LIGHT = {'a': '@', 'e': '3', 'i': '1', 'o': '0', 's': '$'}
 SUFFIXES_COMMON = ['1', '12', '123', '1234', '!', '2024', '2023', '2022', '2021', '00', '99']
@@ -46,7 +47,7 @@ def apply_rules(passwords):
     return result
 
 
-# ── Loading ──────────────────────────────────────────────────────────────────
+# Loading
 
 def load_file(path):
     passwords = []
@@ -58,7 +59,7 @@ def load_file(path):
     return passwords
 
 
-# ── Coverage computation ─────────────────────────────────────────────────────
+# Coverage computation
 
 def coverage(candidates_set, eval_set):
     matches = candidates_set & eval_set
@@ -66,7 +67,7 @@ def coverage(candidates_set, eval_set):
     return len(matches), round(pct, 4)
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+# Main
 
 def main():
     parser = argparse.ArgumentParser()
@@ -80,7 +81,7 @@ def main():
     random.seed(args.seed)
 
     print("=" * 60)
-    print("COVERAGE CURVE — Analyse multi-échelle")
+    print("COVERAGE CURVE - Analyse multi-echelle")
     print("=" * 60)
 
     # Chargement
@@ -90,10 +91,10 @@ def main():
     eval_set  = set(eval_pwds)
 
     total_gen = len(generated)
-    print(f"  Générés disponibles : {total_gen:,}")
+    print(f"  Generes disponibles : {total_gen:,}")
     print(f"  Eval (cibles)       : {len(eval_set):,}")
 
-    # Paliers à tester (on adapte selon ce qu'on a)
+    # Paliers a tester (on adapte selon ce qu'on a)
     thresholds = [1_000, 5_000, 10_000, 50_000, 100_000,
                   500_000, 1_000_000, 5_000_000, 10_000_000]
     thresholds = [t for t in thresholds if t <= total_gen]
@@ -107,7 +108,7 @@ def main():
     print("-" * 60)
 
     for n in thresholds:
-        # Sous-ensemble aléatoire de taille n
+        # Sous-ensemble aleatoire de taille n
         if n >= total_gen:
             subset = generated
         else:
@@ -148,15 +149,15 @@ def main():
         }, f, indent=2)
     print(f"\nResultats sauvegardes : {args.output}")
 
-    # Résumé
+    # Resume
     print("\n" + "=" * 60)
-    print("RÉSUMÉ — Points clés pour l'article")
+    print("RESUME - Points cles pour l'article")
     print("=" * 60)
     for r in results:
         n = r['n_candidates']
         pct = r['coverage_pct']
-        after = f"  →  {r['coverage_after_rules_pct']:.3f}% après rules ({r['n_after_rules']:,} cand.)" if 'coverage_after_rules_pct' in r else ""
-        print(f"  {n:>10,} candidats  →  {pct:.3f}% coverage{after}")
+        after = f"  =>  {r['coverage_after_rules_pct']:.3f}% apres rules ({r['n_after_rules']:,} cand.)" if 'coverage_after_rules_pct' in r else ""
+        print(f"  {n:>10,} candidats  =>  {pct:.3f}% coverage{after}")
 
 
 if __name__ == '__main__':
