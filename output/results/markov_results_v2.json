@@ -1,0 +1,38 @@
+{
+  "eval_size": 143378,
+  "train_size": 2000000,
+  "results": {
+    "order_1": {
+      "unique_states": 410,
+      "perplexity_train": 19.5913,
+      "perplexity_eval": 19.232,
+      "generated_unique": 500000,
+      "matches": 228,
+      "coverage_pct": 0.159
+    },
+    "order_2": {
+      "unique_states": 10861,
+      "perplexity_train": 16.9005,
+      "perplexity_eval": 16.7381,
+      "generated_unique": 500000,
+      "matches": 358,
+      "coverage_pct": 0.2497
+    },
+    "order_3": {
+      "unique_states": 191948,
+      "perplexity_train": 13.6821,
+      "perplexity_eval": 13.1565,
+      "generated_unique": 500000,
+      "matches": 551,
+      "coverage_pct": 0.3843
+    },
+    "order_4": {
+      "unique_states": 1125304,
+      "perplexity_train": 9.7182,
+      "perplexity_eval": 10.5641,
+      "generated_unique": 500000,
+      "matches": 769,
+      "coverage_pct": 0.5363
+    }
+  }
+}

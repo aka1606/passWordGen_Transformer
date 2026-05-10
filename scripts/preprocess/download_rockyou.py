@@ -1,7 +1,7 @@
 """
-Telecharge RockYou et prepare le split train/eval.
-A lancer sur le serveur avant train_server.py.
-Usage: python scripts/prepare_data.py
+Télécharge RockYou et prépare le split train/eval.
+À lancer une seule fois avant prepare_dataset.py.
+Usage: python scripts/preprocess/download_rockyou.py
 """
 
 import os, random, urllib.request, gzip, shutil, time

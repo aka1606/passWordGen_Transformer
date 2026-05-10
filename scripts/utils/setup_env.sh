@@ -1,5 +1,5 @@
 #!/bin/bash
-# A lancer UNE SEULE FOIS en interactif (pas via sbatch)
+# À lancer UNE SEULE FOIS en interactif (pas via sbatch)
 # Usage: bash scripts/utils/setup_env.sh
 
 set -e
@@ -22,9 +22,10 @@ if torch.cuda.is_available():
     print(f'GPU: {torch.cuda.get_device_name(0)}')
 "
 
-echo "=== [4/4] Preparation des donnees RockYou ==="
+echo "=== [4/4] Preparation des donnees ==="
 mkdir -p output/models output/results output/generated
-python3 scripts/utils/prepare_data.py
+python3 scripts/preprocess/download_rockyou.py
+python3 scripts/preprocess/prepare_dataset.py --freq-weight
 
 echo ""
-echo "Setup termine. Lance maintenant: sbatch scripts/utils/job.sh"
+echo "Setup termine. Lance maintenant: sbatch scripts/slurm/job_v7.sh"

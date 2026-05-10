@@ -1,19 +1,14 @@
 """
-Rules Engine — Augmentation de passwords generes par mutations.
+Rules Engine — mutations sur les passwords générés.
 
 Usage:
-    python scripts/analysis/rules_engine.py --input output/generated/v6_generated.txt
-    python scripts/analysis/rules_engine.py --input output/generated/v6_generated.txt --eval data/splits/rockyou_eval.txt
+    python scripts/analysis/rules_engine.py --input output/generated/v7_generated.txt
+    python scripts/analysis/rules_engine.py --input output/generated/v7_generated.txt --eval data/splits/rockyou_eval.txt
 """
 
-import os, sys, argparse, time, random
-from itertools import product
+import os, argparse, time, random
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# ============================================================
-# REGLES
-# ============================================================
 
 LEET_MAP = {
     'a': '@', 'e': '3', 'i': '1', 'o': '0',
@@ -25,25 +20,18 @@ LEET_MAP_LIGHT = {
 }
 
 SUFFIXES = [
-    # Chiffres courts
     '1', '2', '3', '12', '21', '123', '1234', '12345', '123456',
     '0', '01', '007', '11', '22', '33', '00', '99', '69', '88',
-    # Annees
     '2024', '2023', '2022', '2021', '2020', '2019', '2018',
     '24', '23', '22', '21', '20', '19', '18',
     '1990', '1991', '1992', '1993', '1994', '1995',
     '1996', '1997', '1998', '1999', '2000', '2001',
-    # Symboles
     '!', '!!', '!!!', '!1', '1!', '!123', '123!',
     '.', '*', '#', '@', '?', '_', '-',
-    # Combos frequents
     '1!', '1!!', '123!', '!@#', '1@3',
 ]
 
-PREFIXES = [
-    '1', '12', '123', '0', '00',
-    'the', 'my', 'mr', 'ms',
-]
+PREFIXES = ['1', '12', '123', '0', '00', 'the', 'my', 'mr', 'ms']
 
 MIN_LEN = 4
 MAX_LEN = 30
@@ -54,14 +42,10 @@ def is_valid(pwd):
 
 
 def leet(pwd, leet_map):
-    result = []
-    for c in pwd:
-        result.append(leet_map.get(c.lower(), c))
-    return ''.join(result)
+    return ''.join(leet_map.get(c.lower(), c) for c in pwd)
 
 
 def generate_variants(pwd):
-    """Genere toutes les variantes d'un password."""
     if not pwd or not is_valid(pwd):
         return
     cap = pwd.capitalize()
@@ -90,11 +74,6 @@ def generate_variants(pwd):
 
 
 def apply_rules(base_passwords, verbose=True, eval_set=None):
-    """
-    Applique toutes les mutations sur base_passwords.
-    Si eval_set fourni: mode streaming (RAM constante), retourne matches uniquement.
-    Sinon: retourne le set complet (attention RAM).
-    """
     t0 = time.time()
     total = len(base_passwords)
     total_candidates = 0
@@ -104,7 +83,7 @@ def apply_rules(base_passwords, verbose=True, eval_set=None):
         print(f"   Application des regles...")
 
     if eval_set is not None:
-        # Mode streaming: RAM constante, on check contre eval a la volee
+        # Mode streaming : on check contre eval à la volée pour garder la RAM constante
         matches = set()
         for i, pwd in enumerate(base_passwords):
             for v in generate_variants(pwd):
@@ -115,12 +94,10 @@ def apply_rules(base_passwords, verbose=True, eval_set=None):
                 elapsed = time.time() - t0
                 print(f"   {i+1:,}/{total:,} ({(i+1)/total*100:.0f}%) | "
                       f"{total_candidates:,} candidats | {elapsed:.0f}s")
-        elapsed = time.time() - t0
         if verbose:
-            print(f"   Done en {elapsed:.0f}s → {total_candidates:,} candidats, {len(matches):,} matches")
+            print(f"   Done en {time.time()-t0:.0f}s -> {total_candidates:,} candidats, {len(matches):,} matches")
         return matches, total_candidates
     else:
-        # Mode classique: accumule tout (attention RAM pour gros volumes)
         candidates = set()
         for i, pwd in enumerate(base_passwords):
             for v in generate_variants(pwd):
@@ -129,15 +106,10 @@ def apply_rules(base_passwords, verbose=True, eval_set=None):
                 elapsed = time.time() - t0
                 print(f"   {i+1:,}/{total:,} ({(i+1)/total*100:.0f}%) | "
                       f"{len(candidates):,} candidats | {elapsed:.0f}s")
-        elapsed = time.time() - t0
         if verbose:
-            print(f"   Done en {elapsed:.0f}s → {len(candidates):,} candidats uniques")
+            print(f"   Done en {time.time()-t0:.0f}s -> {len(candidates):,} candidats uniques")
         return candidates
 
-
-# ============================================================
-# EVALUATION
-# ============================================================
 
 def evaluate_coverage(candidates, eval_passwords, label=""):
     eval_set = set(eval_passwords)
@@ -151,13 +123,10 @@ def evaluate_coverage(candidates, eval_passwords, label=""):
 
 
 def coverage_by_rule(base_passwords, eval_passwords, sample=50_000):
-    """Montre la contribution de chaque type de regle."""
     eval_set = set(eval_passwords)
-    base_set = set(base_passwords)
+    sample_base = list(set(base_passwords))[:sample]
 
     print("\n   Contribution par regle (sample):")
-    sample_base = list(base_set)[:sample]
-
     rules = {
         'original':    lambda p: {p},
         'capitalize':  lambda p: {p.capitalize()},
@@ -174,10 +143,7 @@ def coverage_by_rule(base_passwords, eval_passwords, sample=50_000):
 
     results = {}
     for name, fn in rules.items():
-        gen = set()
-        for p in sample_base:
-            gen.update(fn(p))
-        gen = {p for p in gen if is_valid(p)}
+        gen = {p for base in sample_base for p in fn(base) if is_valid(p)}
         hits = gen & eval_set
         results[name] = (len(hits), len(gen))
         print(f"      {name:15s}: {len(hits):5,} hits / {len(gen):8,} generes "
@@ -186,31 +152,20 @@ def coverage_by_rule(base_passwords, eval_passwords, sample=50_000):
     return results
 
 
-# ============================================================
-# MAIN
-# ============================================================
-
 def main():
     parser = argparse.ArgumentParser(description='Rules Engine — augmentation de passwords')
-    parser.add_argument('--input',  default=None,
-                        help='Fichier de passwords generes (un par ligne)')
-    parser.add_argument('--eval',   default=os.path.join(BASE_DIR, 'data', 'splits', 'rockyou_eval.txt'),
-                        help='Fichier eval pour mesurer la couverture')
-    parser.add_argument('--output', default=os.path.join(BASE_DIR, 'output', 'generated', 'rules_augmented.txt'),
-                        help='Fichier de sortie')
-    parser.add_argument('--markov', default=None,
-                        help='Fichier Markov a combiner (optionnel)')
-    parser.add_argument('--analysis', action='store_true',
-                        help='Affiche la contribution par regle')
-    parser.add_argument('--no-save', action='store_true',
-                        help='Ne pas sauvegarder le fichier de sortie')
+    parser.add_argument('--input',    default=None)
+    parser.add_argument('--eval',     default=os.path.join(BASE_DIR, 'data', 'splits', 'rockyou_eval.txt'))
+    parser.add_argument('--output',   default=os.path.join(BASE_DIR, 'output', 'generated', 'rules_augmented.txt'))
+    parser.add_argument('--markov',   default=None)
+    parser.add_argument('--analysis', action='store_true')
+    parser.add_argument('--no-save',  action='store_true')
     args = parser.parse_args()
 
     print("=" * 60)
     print("RULES ENGINE — Augmentation par mutations")
     print("=" * 60)
 
-    # Charger eval
     eval_pwds = []
     if os.path.exists(args.eval):
         with open(args.eval, 'r', encoding='utf-8', errors='ignore') as f:
@@ -219,9 +174,7 @@ def main():
     else:
         print(f"\nWarning: fichier eval non trouve ({args.eval})")
 
-    # Charger passwords de base
     base_pwds = []
-
     if args.input and os.path.exists(args.input):
         with open(args.input, 'r', encoding='utf-8', errors='ignore') as f:
             for line in f:
@@ -230,11 +183,9 @@ def main():
                     base_pwds.append(line)
         print(f"Transformer: {len(base_pwds):,} passwords ({args.input})")
     else:
-        # Pas de fichier input — utilise l'eval comme demo
         print(f"Pas de fichier input specifie. Mode demo sur eval.")
         base_pwds = eval_pwds[:10_000] if eval_pwds else []
 
-    # Charger Markov si fourni
     if args.markov and os.path.exists(args.markov):
         with open(args.markov, 'r', encoding='utf-8', errors='ignore') as f:
             markov_pwds = [l.strip() for l in f if l.strip() and not l.startswith('#')]
@@ -242,20 +193,16 @@ def main():
         base_pwds = list(set(base_pwds) | set(markov_pwds))
         print(f"Combined base: {len(base_pwds):,} passwords")
 
-    # Coverage avant regles
     if eval_pwds:
         evaluate_coverage(set(base_pwds), eval_pwds, "AVANT regles")
 
-    # Analyse par regle
     if args.analysis and eval_pwds:
         coverage_by_rule(base_pwds, eval_pwds)
 
-    # Appliquer les regles (mode streaming si eval disponible)
     print(f"\nApplication des regles sur {len(base_pwds):,} passwords...")
     eval_set = set(eval_pwds) if eval_pwds else None
 
     if eval_set:
-        # Mode streaming: RAM constante, seuls les matches sont gardés
         matches, total_candidates = apply_rules(base_pwds, verbose=True, eval_set=eval_set)
         pct_after = len(matches) / len(eval_set) * 100
         print(f"\n   [APRES regles] Coverage: {len(matches):,}/{len(eval_set):,} = {pct_after:.2f}%")
@@ -268,7 +215,6 @@ def main():
         total_candidates = len(augmented)
         pct_after = 0.0
 
-    # Sauvegarder (uniquement les matches si mode streaming)
     if not args.no_save and matches:
         os.makedirs(os.path.dirname(args.output), exist_ok=True)
         with open(args.output, 'w', encoding='utf-8') as f:

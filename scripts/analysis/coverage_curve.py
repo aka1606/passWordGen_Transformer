@@ -1,32 +1,24 @@
-# -*- coding: utf-8 -*-
 """
-Coverage curve analysis - teste le coverage a differentes echelles de candidats.
+Coverage curve — évalue le taux de couverture à différentes échelles de candidats.
 
-Usage (local):
-    python3 scripts/analysis/coverage_curve.py \
-        --generated output/generated/generated_passwords.txt \
-        --eval data/splits/rockyou_eval.txt
-
-Usage (cluster, 1M+ candidats):
+Usage:
     python3 scripts/analysis/coverage_curve.py \
         --generated output/generated/v7_generated.txt \
-        --eval data/splits/rockyou_eval.txt \
-        --rules
+        --eval data/splits/rockyou_eval.txt [--rules]
 """
 
-import os, sys, argparse, random, json, time
-from itertools import product
+import os, argparse, random, json, time
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Rules engine inline (meme logique que rules_engine.py)
 
 LEET_MAP_LIGHT = {'a': '@', 'e': '3', 'i': '1', 'o': '0', 's': '$'}
 SUFFIXES_COMMON = ['1', '12', '123', '1234', '!', '2024', '2023', '2022', '2021', '00', '99']
 MIN_LEN, MAX_LEN = 4, 30
 
+
 def _leet(pwd, m):
     return ''.join(m.get(c.lower(), c) for c in pwd)
+
 
 def _variants(pwd):
     if not pwd or not (MIN_LEN <= len(pwd) <= MAX_LEN and pwd.isprintable()):
@@ -39,6 +31,7 @@ def _variants(pwd):
         v.update([pwd + s, cap + s, low + s])
     return [x for x in v if MIN_LEN <= len(x) <= MAX_LEN]
 
+
 def apply_rules(passwords):
     result = set()
     for pwd in passwords:
@@ -46,8 +39,6 @@ def apply_rules(passwords):
             result.add(v)
     return result
 
-
-# Loading
 
 def load_file(path):
     passwords = []
@@ -59,21 +50,17 @@ def load_file(path):
     return passwords
 
 
-# Coverage computation
-
 def coverage(candidates_set, eval_set):
     matches = candidates_set & eval_set
     pct = len(matches) / len(eval_set) * 100 if eval_set else 0
     return len(matches), round(pct, 4)
 
 
-# Main
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--generated', default=os.path.join(BASE_DIR, 'output', 'generated', 'generated_passwords.txt'))
     parser.add_argument('--eval',      default=os.path.join(BASE_DIR, 'data', 'splits', 'rockyou_eval.txt'))
-    parser.add_argument('--rules',     action='store_true', help='Also compute coverage after rules engine')
+    parser.add_argument('--rules',     action='store_true')
     parser.add_argument('--seed',      type=int, default=42)
     parser.add_argument('--output',    default=os.path.join(BASE_DIR, 'output', 'results', 'coverage_curve.json'))
     args = parser.parse_args()
@@ -84,36 +71,27 @@ def main():
     print("COVERAGE CURVE - Analyse multi-echelle")
     print("=" * 60)
 
-    # Chargement
-    print(f"\nChargement des fichiers...")
     generated = load_file(args.generated)
     eval_pwds = load_file(args.eval)
     eval_set  = set(eval_pwds)
-
     total_gen = len(generated)
-    print(f"  Generes disponibles : {total_gen:,}")
+
+    print(f"\n  Generes disponibles : {total_gen:,}")
     print(f"  Eval (cibles)       : {len(eval_set):,}")
 
-    # Paliers a tester (on adapte selon ce qu'on a)
     thresholds = [1_000, 5_000, 10_000, 50_000, 100_000,
                   500_000, 1_000_000, 5_000_000, 10_000_000]
     thresholds = [t for t in thresholds if t <= total_gen]
-    thresholds.append(total_gen)   # toujours tester le max disponible
+    thresholds.append(total_gen)  # toujours tester le max disponible
     thresholds = sorted(set(thresholds))
 
     results = []
-    gen_set_full = set(generated)
 
     print(f"\n{'Candidats':>12}  {'Matches':>8}  {'Coverage':>8}  {'+ Rules':>8}  {'+ Rules cand':>14}")
     print("-" * 60)
 
     for n in thresholds:
-        # Sous-ensemble aleatoire de taille n
-        if n >= total_gen:
-            subset = generated
-        else:
-            subset = random.sample(generated, n)
-
+        subset = generated if n >= total_gen else random.sample(generated, n)
         subset_set = set(subset)
         matches, pct = coverage(subset_set, eval_set)
 
@@ -139,7 +117,6 @@ def main():
 
         results.append(row)
 
-    # Sauvegarde
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, 'w') as f:
         json.dump({
@@ -149,9 +126,8 @@ def main():
         }, f, indent=2)
     print(f"\nResultats sauvegardes : {args.output}")
 
-    # Resume
     print("\n" + "=" * 60)
-    print("RESUME - Points cles pour l'article")
+    print("RESUME")
     print("=" * 60)
     for r in results:
         n = r['n_candidates']

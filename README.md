@@ -25,32 +25,19 @@ ams-projet2/
 │   │   └── prepare_dataset.py        # Fusionne et prepare combined_train.txt
 │   │
 │   ├── training/
-│   │   ├── train_server.py           # v6: 7M parametres, RockYou seul
 │   │   ├── train_server_v7.py        # v7: 10.4M parametres, RoPE, 25M freq-weighted
-│   │   ├── markov_chain.py           # Modele Markov (baseline)
-│   │   └── transformer_gen.py        # Version locale (Mac)
 │   │
 │   ├── analysis/
 │   │   ├── rules_engine.py           # Moteur de mutation (capitalize, leet, suffixes)
-│   │   ├── analyse_eval.py
-│   │   ├── analyse_avancee.py
-│   │   ├── pca_clustering.py
-│   │   ├── benchmark.py
-│   │   └── vocab.py
+│   │   └── coverage_curve.py          # Mesure coverage vs taille du dico
 │   │
 │   ├── slurm/                        # Jobs SLURM pour cluster
-│   │   ├── job.sh                    # Entrainement v6
 │   │   ├── job_v7.sh                 # Entrainement v7
-│   │   ├── generate_job.sh           # Generation v6
 │   │   └── generate_job_v7.sh        # Generation v7
 │   │
 │   └── utils/
 │       ├── setup_env.sh              # Setup conda env
 │       └── setup_server.sh           # Setup cluster
-│
-├── docs/
-│   ├── rapport.tex                   # Rapport LaTeX
-│   └── strategie_analyses.md
 │
 └── output/
     ├── models/                       # Checkpoints (.pt, gitignored)
@@ -163,4 +150,4 @@ Les resultats v7 seront ajoutes dans le rapport apres convergence.
 
 ## Rapport
 
-Voir [docs/rapport.tex](docs/rapport.tex) pour les details complets et les resultats.
+Le rapport (PDF/LaTeX) n'est pas inclus dans ce dépôt tel qu'il est actuellement. Les métriques et résultats intermédiaires sont dans output/results/.

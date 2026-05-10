@@ -1,0 +1,46 @@
+{
+  "eval_size": 143294,
+  "total_generated": 11938,
+  "curve": [
+    {
+      "n_candidates": 1000,
+      "n_unique": 1000,
+      "matches": 3,
+      "coverage_pct": 0.0021,
+      "n_after_rules": 24151,
+      "matches_after_rules": 13,
+      "coverage_after_rules_pct": 0.0091,
+      "rules_time_sec": 0.0
+    },
+    {
+      "n_candidates": 5000,
+      "n_unique": 4999,
+      "matches": 23,
+      "coverage_pct": 0.0161,
+      "n_after_rules": 120869,
+      "matches_after_rules": 85,
+      "coverage_after_rules_pct": 0.0593,
+      "rules_time_sec": 0.03
+    },
+    {
+      "n_candidates": 10000,
+      "n_unique": 9985,
+      "matches": 55,
+      "coverage_pct": 0.0384,
+      "n_after_rules": 241057,
+      "matches_after_rules": 186,
+      "coverage_after_rules_pct": 0.1298,
+      "rules_time_sec": 0.05
+    },
+    {
+      "n_candidates": 11938,
+      "n_unique": 11919,
+      "matches": 62,
+      "coverage_pct": 0.0433,
+      "n_after_rules": 287776,
+      "matches_after_rules": 213,
+      "coverage_after_rules_pct": 0.1486,
+      "rules_time_sec": 0.07
+    }
+  ]
+}

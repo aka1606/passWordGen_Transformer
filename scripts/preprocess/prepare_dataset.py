@@ -1,25 +1,22 @@
-# -*- coding: utf-8 -*-
 """
 Prépare le dataset d'entraînement combiné.
 
 Sources:
-  - RockYou brut (data/raw/rockyou.txt)
-  - RockYou avec fréquences (data/extra/rockyou-withcount.txt)
+  - RockYou avec fréquences (data/extra/rockyou-withcount.txt)  [freq-weighted]
+  - RockYou brut (data/raw/rockyou.txt)                         [fallback]
   - Pwdb top 10M (data/extra/pwdb_top10M.txt)
   - 000webhost (data/extra/000webhost.txt)
   - phpbb (data/extra/phpbb.txt)
 
-Sortie:
-  - data/splits/combined_train.txt  → entraînement (dédupliqué ou freq-weighted)
-  - data/splits/combined_eval.txt   → évaluation (143k passwords, inchangé)
+Sorties:
+  - data/splits/combined_train.txt
+  - data/splits/combined_eval.txt  (copie de rockyou_eval.txt, inchangé)
 
 Usage:
-    python scripts/preprocess/prepare_dataset.py
-    python scripts/preprocess/prepare_dataset.py --freq-weight --max-repeat 10
+    python scripts/preprocess/prepare_dataset.py --freq-weight --max-repeat 5
 """
 
-import os, argparse, random, re
-from collections import defaultdict
+import os, argparse, random, shutil
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -31,22 +28,22 @@ SOURCES = {
     'phpbb':          os.path.join(BASE_DIR, 'data', 'extra', 'phpbb.txt'),
 }
 
-EVAL_FILE   = os.path.join(BASE_DIR, 'data', 'splits', 'rockyou_eval.txt')
-OUT_TRAIN   = os.path.join(BASE_DIR, 'data', 'splits', 'combined_train.txt')
-OUT_EVAL    = os.path.join(BASE_DIR, 'data', 'splits', 'combined_eval.txt')
+EVAL_FILE = os.path.join(BASE_DIR, 'data', 'splits', 'rockyou_eval.txt')
+OUT_TRAIN = os.path.join(BASE_DIR, 'data', 'splits', 'combined_train.txt')
+OUT_EVAL  = os.path.join(BASE_DIR, 'data', 'splits', 'combined_eval.txt')
 
 MIN_LEN, MAX_LEN = 4, 30
 
 
 def is_valid(p):
-    """ASCII printable only (chars 32-126): lettres, chiffres, symboles courants."""
+    """ASCII printable uniquement (codes 32-126) pour un vocabulaire compact."""
     if not p or not (MIN_LEN <= len(p) <= MAX_LEN):
         return False
     return all(32 <= ord(c) <= 126 for c in p)
 
 
 def load_rockyou_withcount(path, max_repeat=10):
-    """Charge rockyou-withcount.txt: format 'COUNT PASSWORD'"""
+    """Charge rockyou-withcount.txt (format 'COUNT PASSWORD') avec freq-weighting."""
     passwords = []
     with open(path, 'r', encoding='utf-8', errors='ignore') as f:
         for line in f:
@@ -59,14 +56,11 @@ def load_rockyou_withcount(path, max_repeat=10):
                 try:
                     count = int(count_str)
                 except ValueError:
-                    pwd = line
-                    count = 1
+                    pwd, count = line, 1
             else:
-                pwd = line
-                count = 1
+                pwd, count = line, 1
             if not is_valid(pwd):
                 continue
-            # Répéter proportionnellement à la fréquence, cappé à max_repeat
             repeats = min(max_repeat, max(1, round(1 + (count / 10000))))
             for _ in range(repeats):
                 passwords.append(pwd)
@@ -74,7 +68,6 @@ def load_rockyou_withcount(path, max_repeat=10):
 
 
 def load_plain(path):
-    """Charge un fichier de passwords un par ligne."""
     passwords = []
     with open(path, 'r', encoding='utf-8', errors='ignore') as f:
         for line in f:
@@ -98,26 +91,24 @@ def main():
     print("PRÉPARATION DU DATASET COMBINÉ")
     print("=" * 60)
 
-    # Charger l'eval existant (inchangé)
     eval_pwds = set()
     if os.path.exists(EVAL_FILE):
         with open(EVAL_FILE, 'r', encoding='utf-8', errors='ignore') as f:
             eval_pwds = {l.strip() for l in f if l.strip()}
         print(f"\nEval set: {len(eval_pwds):,} passwords (conservé tel quel)")
 
-    # Charger les sources
     all_train = []
 
     # 1. RockYou (source principale)
     if args.freq_weight and os.path.exists(SOURCES['rockyou_wcount']):
         print(f"\nChargement RockYou avec fréquences...")
         ry = load_rockyou_withcount(SOURCES['rockyou_wcount'], args.max_repeat)
-        print(f"  → {len(ry):,} entrées (freq-weighted)")
+        print(f"  -> {len(ry):,} entrées (freq-weighted)")
         all_train.extend(ry)
     elif os.path.exists(SOURCES['rockyou']):
         print(f"\nChargement RockYou brut...")
         ry = load_plain(SOURCES['rockyou'])
-        print(f"  → {len(ry):,} passwords")
+        print(f"  -> {len(ry):,} passwords")
         all_train.extend(ry)
 
     if not args.no_extra:
@@ -125,54 +116,46 @@ def main():
         if os.path.exists(SOURCES['pwdb_10m']):
             print(f"Chargement Pwdb top 10M...")
             pwdb = load_plain(SOURCES['pwdb_10m'])
-            print(f"  → {len(pwdb):,} passwords")
+            print(f"  -> {len(pwdb):,} passwords")
             all_train.extend(pwdb)
 
         # 3. 000webhost
         if os.path.exists(SOURCES['000webhost']):
             print(f"Chargement 000webhost...")
             wh = load_plain(SOURCES['000webhost'])
-            print(f"  → {len(wh):,} passwords")
+            print(f"  -> {len(wh):,} passwords")
             all_train.extend(wh)
 
         # 4. phpbb
         if os.path.exists(SOURCES['phpbb']):
             print(f"Chargement phpbb...")
             pb = load_plain(SOURCES['phpbb'])
-            print(f"  → {len(pb):,} passwords")
+            print(f"  -> {len(pb):,} passwords")
             all_train.extend(pb)
 
     print(f"\nTotal brut: {len(all_train):,}")
-
-    # Retirer les passwords qui sont dans l'eval
     print(f"Filtrage (retrait eval + doublons)...")
+
     if not args.freq_weight:
-        # Sans freq-weighting: dédupliquer
+        # Sans freq-weighting : dédupliquer complètement
         all_train = list({p for p in all_train if p not in eval_pwds})
     else:
-        # Avec freq-weighting: garder les doublons mais retirer ceux dans eval
+        # Avec freq-weighting : garder les doublons (ils encodent la fréquence)
         all_train = [p for p in all_train if p not in eval_pwds]
 
     print(f"Total après filtrage: {len(all_train):,}")
 
-    # Shuffle
     random.shuffle(all_train)
 
-    # Sauvegarder
     os.makedirs(os.path.dirname(OUT_TRAIN), exist_ok=True)
-
     with open(OUT_TRAIN, 'w', encoding='utf-8') as f:
         for p in all_train:
             f.write(p + '\n')
-    print(f"\nSauvegardé: {OUT_TRAIN}")
-    print(f"  {len(all_train):,} passwords d'entraînement")
+    print(f"\nSauvegardé: {OUT_TRAIN} ({len(all_train):,} passwords)")
 
-    # Copier eval
-    import shutil
     shutil.copy2(EVAL_FILE, OUT_EVAL)
     print(f"Eval copié: {OUT_EVAL}")
 
-    # Stats
     print(f"\n{'='*60}")
     print(f"RÉSUMÉ")
     print(f"  Train: {len(all_train):,}")

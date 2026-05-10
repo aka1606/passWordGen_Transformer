@@ -1,10 +1,4 @@
-"""
-PasswordTransformer v7 — Dataset combiné 25M (freq-weighted) + RoPE + 12 couches
-Changements vs v6:
-  - Dataset: 25M passwords (RockYou freq-weighted + Pwdb10M + 000webhost + phpbb)
-  - Architecture: 12 couches (vs 8), RoPE (vs sinusoidal PE)
-  - Génération: températures multiples (0.5, 0.7, 0.9)
-"""
+# PasswordTransformer v7 — corpus combiné 25M (freq-weighted) + RoPE + 12 couches
 
 import os, sys, json, time, math, random, signal, shutil
 import numpy as np
@@ -16,9 +10,6 @@ from torch.cuda.amp import GradScaler
 
 SCRIPT_VERSION = 7
 
-# ============================================================
-# CONFIG
-# ============================================================
 
 class Config:
     BASE_DIR        = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -33,17 +24,16 @@ class Config:
 
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    # Architecture v7: +4 couches + RoPE
+    # v7: 12 couches + RoPE (vs 8 couches + sinusoïdal pour v6)
     MAX_SEQ_LEN = 32
     EMBED_DIM   = 256
     NUM_HEADS   = 8       # head_dim = 32 (pair -> RoPE OK)
-    NUM_LAYERS  = 12      # 8 -> 12
+    NUM_LAYERS  = 12
     FF_DIM      = 768
     DROPOUT     = 0.1
 
-    # Entraînement
-    BATCH_SIZE       = 1024     # 12L + 25M data sur P100 16GB -> safe
-    GRAD_ACCUM_STEPS = 4        # batch effectif = 4096 (idem v6)
+    BATCH_SIZE       = 1024
+    GRAD_ACCUM_STEPS = 4        # batch effectif = 4096
     LEARNING_RATE    = 3e-4
     WEIGHT_DECAY     = 0.01
     EPOCHS           = 120
@@ -59,7 +49,6 @@ class Config:
     PATIENCE   = 12
     MIN_DELTA  = 0.0003
 
-    # Génération multi-températures
     NUM_GENERATE    = 1_000_000
     TEMPERATURE     = [0.5, 0.7, 0.9]
     TOP_K           = 50
@@ -67,9 +56,6 @@ class Config:
     GEN_BATCH       = 8192
     GEN_STALE_LIMIT = 5
 
-# ============================================================
-# TOKENIZER
-# ============================================================
 
 class CharTokenizer:
     PAD = '<PAD>'
@@ -150,9 +136,6 @@ class CharTokenizer:
         print(f"   Encode en {time.time()-t0:.1f}s -> tensor {result.shape}")
         return torch.from_numpy(result)
 
-# ============================================================
-# GPU BATCH ITERATOR
-# ============================================================
 
 class PasswordDataset(Dataset):
     def __init__(self, tensor_data):
@@ -167,7 +150,7 @@ class PasswordDataset(Dataset):
 
 
 def gpu_batch_iter(tensor, batch_size, drop_last=True):
-    """Tensor stocké en int16 (compact); conversion en long par batch."""
+    """Tensor en int16 (compact); conversion en long par batch."""
     n = tensor.size(0)
     perm = torch.randperm(n, device=tensor.device)
     shuffled = tensor[perm]
@@ -176,9 +159,6 @@ def gpu_batch_iter(tensor, batch_size, drop_last=True):
         batch = shuffled[start:start + batch_size].long()
         yield batch[:, :-1], batch[:, 1:]
 
-# ============================================================
-# ARCHITECTURE v7: RMSNorm + SwiGLU + RoPE + SDPA + KV-cache
-# ============================================================
 
 class RMSNorm(nn.Module):
     def __init__(self, dim, eps=1e-6):
@@ -204,19 +184,19 @@ class SwiGLUFFN(nn.Module):
 
 
 class RotaryEmbedding(nn.Module):
-    """RoPE: Rotary Position Embeddings (Su et al. 2021)."""
+    """RoPE — Su et al. 2021."""
     def __init__(self, head_dim, max_seq_len=512, base=10000):
         super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2).float() / head_dim))
         self.register_buffer('inv_freq', inv_freq)
         t = torch.arange(max_seq_len, dtype=torch.float)
         freqs = torch.outer(t, inv_freq)
-        emb = torch.cat([freqs, freqs], dim=-1)  # [T, head_dim]
+        emb = torch.cat([freqs, freqs], dim=-1)
         self.register_buffer('cos_cache', emb.cos())
         self.register_buffer('sin_cache', emb.sin())
 
     def forward(self, seq_len, offset=0):
-        cos = self.cos_cache[offset:offset + seq_len].unsqueeze(0).unsqueeze(0)  # [1,1,T,d]
+        cos = self.cos_cache[offset:offset + seq_len].unsqueeze(0).unsqueeze(0)
         sin = self.sin_cache[offset:offset + seq_len].unsqueeze(0).unsqueeze(0)
         return cos, sin
 
@@ -248,7 +228,7 @@ class CausalSelfAttention(nn.Module):
         offset  = 0 if past_kv is None else past_kv[0].shape[2]
 
         qkv = self.qkv(x).reshape(B, T, 3, self.num_heads, self.head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)  # [3, B, H, T, head_dim]
+        qkv = qkv.permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)
 
         cos, sin = self.rope(T, offset=offset)
@@ -324,9 +304,6 @@ class PasswordTransformer(nn.Module):
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
-# ============================================================
-# EARLY STOPPING
-# ============================================================
 
 class EarlyStopping:
     def __init__(self, patience=7, min_delta=0.001):
@@ -353,9 +330,6 @@ class EarlyStopping:
     def status(self):
         return f"patience {self.counter}/{self.patience} (best={self.best_loss:.4f})"
 
-# ============================================================
-# GENERATION avec KV-cache
-# ============================================================
 
 @torch.no_grad()
 def generate_passwords(model, tokenizer, num_generate, temperature=0.8,
@@ -436,9 +410,6 @@ def generate_passwords(model, tokenizer, num_generate, temperature=0.8,
     print(f"      Total: {len(generated):,} uniques en {elapsed:.0f}s ({len(generated)/max(elapsed,1):.0f} pwd/s)")
     return generated
 
-# ============================================================
-# VALIDATION
-# ============================================================
 
 @torch.no_grad()
 def evaluate_val(model, val_loader, criterion, device, scaler_enabled=True):
@@ -458,9 +429,6 @@ def evaluate_val(model, val_loader, criterion, device, scaler_enabled=True):
         total_tokens  += mask.sum().item()
     return total_loss / len(val_loader.dataset), total_correct / max(total_tokens, 1) * 100
 
-# ============================================================
-# CHECKPOINT
-# ============================================================
 
 def save_checkpoint(path, model, optimizer, scaler, tokenizer, epoch, global_step,
                     best_val_loss, early_stopping, history, config):
@@ -502,9 +470,6 @@ def load_checkpoint(path, model, optimizer, scaler, early_stopping, device):
     early_stopping.load_state_dict(ckpt['early_stopping'])
     return ckpt['epoch'], ckpt['global_step'], ckpt['best_val_loss'], ckpt['history']
 
-# ============================================================
-# LR SCHEDULE
-# ============================================================
 
 def get_lr(step, warmup_steps, max_lr, cycle_length=8000, cycle_decay=0.85):
     if step < warmup_steps:
@@ -516,9 +481,6 @@ def get_lr(step, warmup_steps, max_lr, cycle_length=8000, cycle_decay=0.85):
     min_lr     = cycle_lr * 0.01
     return min_lr + 0.5 * (cycle_lr - min_lr) * (1 + math.cos(math.pi * in_cycle / cycle_length))
 
-# ============================================================
-# TRAINING
-# ============================================================
 
 _interrupted = False
 
@@ -651,7 +613,7 @@ def train_model(model, train_data, val_loader, eval_passwords, tokenizer, config
         print(f"   | Early Stop: {early_stopping.status()}")
         print(f"   +{'='*50}+")
 
-        # Quick coverage check toutes les 5 epochs
+        # Coverage rapide toutes les 5 epochs pour monitorer sans attendre l'eval finale
         quick_coverage = 0.0
         if (epoch + 1) % 5 == 0 and eval_passwords:
             print(f"   Quick eval (50k candidats, T=0.7)...")
@@ -692,7 +654,7 @@ def train_model(model, train_data, val_loader, eval_passwords, tokenizer, config
                         tokenizer, epoch + 1, global_step, best_val_loss,
                         early_stopping, history, config)
 
-        # Synchro NFS toutes les 3 epochs
+        # Synchro NFS toutes les 3 epochs (ecriture sur /dev/shm, synchro sur NFS)
         if (epoch + 1) % 3 == 0:
             shutil.copy2(config.CHECKPOINT_PATH, os.path.join(NFS_DIR, 'v7_checkpoint.pt'))
             if os.path.exists(config.MODEL_PATH):
@@ -706,9 +668,6 @@ def train_model(model, train_data, val_loader, eval_passwords, tokenizer, config
     signal.signal(signal.SIGINT, old_handler)
     return history, optimizer, early_stopping, scaler
 
-# ============================================================
-# EVALUATION COMPLETE (multi-temperatures)
-# ============================================================
 
 @torch.no_grad()
 def full_evaluation(model, tokenizer, eval_passwords, config):
@@ -771,9 +730,6 @@ def full_evaluation(model, tokenizer, eval_passwords, config):
     }
     return results
 
-# ============================================================
-# MAIN
-# ============================================================
 
 def main():
     random.seed(42)
@@ -806,7 +762,7 @@ def main():
             print(f"Copie model NFS -> RAM disk")
 
     print("=" * 60)
-    print(f"PasswordTransformer v{SCRIPT_VERSION} — Dataset combiné 25M (freq-weighted)")
+    print(f"PasswordTransformer v{SCRIPT_VERSION} — Dataset combine 25M (freq-weighted)")
     print(f"Archi: {config.NUM_LAYERS}L-{config.NUM_HEADS}H-{config.EMBED_DIM}D | SwiGLU+RMSNorm+RoPE+KV-cache")
     print(f"Device: {config.DEVICE.upper()} | AMP: {config.USE_AMP}")
     print("=" * 60)
@@ -904,7 +860,7 @@ def main():
 
         print(f"\nChargement tensor train -> {config.DEVICE.upper()} (int16)...")
         t0 = time.time()
-        train_gpu = train_tensor.to(config.DEVICE)  # garde int16 -> 4x moins de VRAM
+        train_gpu = train_tensor.to(config.DEVICE)  # int16 = 4x moins de VRAM qu'int32
         del train_tensor
         vram_mb = train_gpu.element_size() * train_gpu.nelement() / 1024 / 1024
         print(f"   {vram_mb:.0f} MB charges en {time.time()-t0:.1f}s (int16)")
@@ -919,7 +875,6 @@ def main():
             early_stopping, scaler
         )
 
-    # Charger le meilleur modele
     if os.path.exists(config.MODEL_PATH):
         print("\nChargement du meilleur modele...")
         best = torch.load(config.MODEL_PATH, map_location=config.DEVICE, weights_only=False)
